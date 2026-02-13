@@ -1,0 +1,174 @@
+= Common Web Module
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+
+== 개요
+
+웹 공통 인프라 모듈입니다.
+필터, 인터셉터, 예외 처리, 표준 응답 포맷을 제공합니다.
+
+=== 주요 기능
+
+|===
+|기능 |설명
+
+|Filters
+|Request/Response 캐싱, Trace ID 생성
+
+|Interceptors
+|Request/Response 로깅
+
+|Exception Handler
+|전역 예외 처리
+
+|Response
+|ApiResource 표준 응답 포맷
+
+|AOP
+|로그 추적, IP 화이트리스트
+|===
+
+== 필터
+
+=== ContentCachingFilter
+
+Request/Response body를 캐싱하여 다중 읽기가 가능합니다.
+
+=== AppTraceFilter
+
+UUID v7 trace ID를 생성하여 MDC와 HTTP 헤더에 설정합니다.
+
+|===
+|헤더 |설명
+
+|`X-ZZ-TraceId`
+|애플리케이션 트레이스 ID
+
+|`X-B3-TraceId`
+|분산 추적용 트레이스 ID
+
+|`X-ZZ-Response-Timestamp`
+|응답 타임스탬프
+|===
+
+== 인터셉터
+
+=== LogInterceptor
+
+Request 정보를 로깅합니다.
+
+[source,kotlin]
+----
+@ExcludeRequestLog  // Production 환경에서 로깅 제외
+----
+
+=== LogResponseBodyInterceptor
+
+Response body를 로깅합니다. 어노테이션으로 세부 설정합니다.
+
+[source,kotlin]
+----
+@LogResponseBody(maxLength = 500, logLevel = Level.DEBUG)
+----
+
+== 응답 포맷
+
+=== ApiResource
+
+표준 API 응답 포맷입니다. 모든 API가 이 형식을 따릅니다.
+
+[source,kotlin]
+----
+// 단일 데이터 응답
+ApiResource.success(data)
+
+// 페이지 응답
+ApiResource.ofPage(page)
+
+// 컬렉션 응답
+ApiResource.ofCollection(list)
+----
+
+== AOP
+
+=== LogTrace
+
+메서드 호출 계층과 실행 시간을 추적합니다.
+
+[source,kotlin]
+----
+@LogTrace           // 추적 활성화
+@ExcludeLogTrace    // 추적 제외
+----
+
+=== CheckIp
+
+IP 기반 접근을 제어합니다.
+
+[source,kotlin]
+----
+@CheckIp(["192.168.1.1"])  // 특정 IP만 허용
+@CheckIp(["*"])            // 모든 IP 허용
+----
+
+== 유틸리티
+
+|===
+|클래스 |설명
+
+|`EnvironmentUtil`
+|환경/프로파일 확인 (`isProduction()`, `isLocal()` 등)
+
+|`IpAddrUtil`
+|서버/클라이언트 IP 조회
+|===
+
+== 설정 방법
+
+프로파일에 `common-web`을 포함하세요.
+
+[source,yaml]
+----
+spring:
+  profiles:
+    include: common-web
+----
+
+== 주의 사항
+
+[IMPORTANT]
+====
+**패키지 변경 시 Pointcut 수정 필요**
+
+프로젝트 패키지 변경 시 `TracePointcuts.kt`의 pointcut expression을 수정하세요.
+
+[source,kotlin]
+----
+// 기본값
+execution(* com.myrealtrip..*Controller.*(..))
+
+// 프로젝트에 맞게 변경
+execution(* com.mycompany..*Controller.*(..))
+----
+====
+
+[IMPORTANT]
+====
+**비동기 컨텍스트 전파 설정**
+
+MDC와 traceId를 비동기 스레드로 전파하려면 `TaskExecutor` 빈을 등록하세요.
+
+[source,kotlin]
+----
+@Bean
+fun taskExecutor(decorator: ContextPropagatingTaskDecorator): TaskExecutor {
+    return VirtualThreadTaskExecutor("async-").apply {
+        setTaskDecorator(decorator)
+    }
+}
+----
+====

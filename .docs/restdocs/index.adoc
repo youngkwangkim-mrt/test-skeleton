@@ -1,0 +1,91 @@
+= REST Docs 가이드
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+이 문서는 프로젝트의 REST Docs 테스트 작성 방법과 API 문서 생성 전략을 설명합니다.
+
+== 문서 구성
+
+[cols="1,3", options="header"]
+|===
+| 문서 | 설명
+
+| xref:01-overview.adoc[개요]
+| REST Docs 소개, 디렉토리 구조, 핵심 컴포넌트
+
+| xref:02-writing-tests.adoc[테스트 작성]
+| DocsTest 작성 방법, Field DSL, 공통 응답 패턴
+
+| xref:03-examples.adoc[예시 및 AsciiDoc]
+| HolidayControllerDocsTest 분석, AsciiDoc 문서 작성
+
+| xref:04-reference.adoc[참고 자료]
+| Best Practices, 트러블슈팅, 체크리스트, 빌드 명령
+|===
+
+== 빠른 시작
+
+=== 1. DocsTest 작성
+
+[source,kotlin]
+----
+class MyControllerDocsTest : RestDocsSupport() {
+
+    private val myFacade: MyFacade = mock()
+
+    override fun initController(): Any = MyController(myFacade)
+
+    @Test
+    fun `get my resource`(): Unit {
+        // given
+        given(myFacade.findById(1L)).willReturn(MyResource(1L, "name"))
+
+        // when & then
+        mockMvc.perform(get("/api/resources/{id}", 1L))
+            .andExpect(status().isOk)
+            .andDo(
+                restDocs.document(
+                    pathParameters(
+                        parameterWithName("id").description("리소스 ID"),
+                    ),
+                    responseFields(*responseCommonFieldsSubsection()),
+                    dataResponseFields(
+                        "id" type NUMBER means "리소스 ID",
+                        "name" type STRING means "리소스 이름",
+                    ),
+                )
+            )
+    }
+}
+----
+
+=== 2. HTML 문서 생성
+
+[source,bash]
+----
+./gradlew clean :modules:docs:docs
+----
+
+=== 3. 생성된 문서 확인
+
+[source,text]
+----
+modules/docs/build/docs/
+├── index.html
+└── {app-name}/{domain}/*.html
+----
+
+== 관련 문서
+
+* xref:../architecture/07-api-response-format.adoc[API 응답 형식] - ApiResource 구조
+* xref:../architecture/03-error-handling.adoc[에러 처리] - 예외 처리 전략
+* link:../../modules/docs/README.md[Docs 모듈 README] - 문서 빌드 가이드
+
+---
+
+**최종 업데이트**: 2026-02-13

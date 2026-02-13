@@ -1,0 +1,2 @@
+.Page Fields
+include::{snippets}/common-response-docs-test/common page format/response-fields-data.page.adoc[]

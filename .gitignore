@@ -1,0 +1,20 @@
+# Build
+build/
+out/
+
+# Gradle
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin
+.kotlin/
+
+# IntelliJ IDEA
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tools
+.omc/

@@ -1,0 +1,126 @@
+= Holiday API - 등록/수정/삭제
+Holiday API 등록/수정/삭제 연동 가이드
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:table-stripes: hover
+:sectanchors:
+:sectnums:
+:sectnumlevels: 2
+
+
+= Overview
+
+.본 문서는 Holiday API 등록/수정/삭제 기능을 연동하기 위한 문서입니다.
+[NOTE]
+--
+- 공휴일 등록, 수정, 삭제 기능을 제공합니다.
+- 단건 및 대량 등록 기능을 지원합니다.
+--
+
+[[api-req-res]]
+include::../../.templates/template-api-req-res.adoc[]
+
+= APIs
+
+== 등록
+
+[[create]]
+=== 공휴일 등록
+
+[NOTE]
+--
+- 단건 공휴일을 등록합니다.
+--
+
+==== Http Request
+
+include::{snippets}/holiday-controller-docs-test/create holiday/http-request.adoc[]
+
+.Request Fields
+include::{snippets}/holiday-controller-docs-test/create holiday/request-fields.adoc[]
+
+==== Http Response
+
+include::{snippets}/holiday-controller-docs-test/create holiday/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/holiday-controller-docs-test/create holiday/response-fields-data.adoc[]
+
+'''
+
+[[create-bulk]]
+=== 공휴일 대량 등록
+
+[NOTE]
+--
+- 여러 공휴일을 한번에 등록합니다.
+--
+
+==== Http Request
+
+include::{snippets}/holiday-controller-docs-test/create holidays bulk/http-request.adoc[]
+
+.Request Fields
+include::{snippets}/holiday-controller-docs-test/create holidays bulk/request-fields.adoc[]
+
+==== Http Response
+
+include::{snippets}/holiday-controller-docs-test/create holidays bulk/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/holiday-controller-docs-test/create holidays bulk/response-fields-data.adoc[]
+
+'''
+
+== 수정
+
+[[update]]
+=== 공휴일 수정
+
+[NOTE]
+--
+- 기존 공휴일 정보를 수정합니다.
+--
+
+==== Http Request
+
+include::{snippets}/holiday-controller-docs-test/update holiday/http-request.adoc[]
+
+.Path Parameters
+include::{snippets}/holiday-controller-docs-test/update holiday/path-parameters.adoc[]
+
+.Request Fields
+include::{snippets}/holiday-controller-docs-test/update holiday/request-fields.adoc[]
+
+==== Http Response
+
+include::{snippets}/holiday-controller-docs-test/update holiday/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/holiday-controller-docs-test/update holiday/response-fields-data.adoc[]
+
+'''
+
+== 삭제
+
+[[delete]]
+=== 공휴일 삭제
+
+[NOTE]
+--
+- 공휴일을 삭제합니다.
+--
+
+==== Http Request
+
+include::{snippets}/holiday-controller-docs-test/delete holiday/http-request.adoc[]
+
+.Path Parameters
+include::{snippets}/holiday-controller-docs-test/delete holiday/path-parameters.adoc[]
+
+==== Http Response
+
+include::{snippets}/holiday-controller-docs-test/delete holiday/http-response.adoc[]

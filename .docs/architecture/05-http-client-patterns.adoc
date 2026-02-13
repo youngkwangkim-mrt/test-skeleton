@@ -1,0 +1,890 @@
+= HTTP Client Patterns
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+== Overview
+
+This project uses Spring Boot 4.x's declarative HTTP client pattern, leveraging `@HttpExchange` annotations with `@ImportHttpServices` for type-safe, interface-based HTTP communication.
+
+.Key Technologies
+* **@HttpExchange**: Declarative HTTP client interface
+* **@ImportHttpServices**: Spring Boot 4.x feature for registering HTTP service interfaces
+* **RestClient**: Spring's synchronous HTTP client (successor to RestTemplate)
+* **HttpLoggingInterceptor**: Custom logging with method name tracking
+* **HttpExchangeMethodAspect**: AOP-based method name capture via ThreadLocal
+
+.Benefits
+* Type-safe interface definitions
+* Declarative HTTP mappings (no manual URL building)
+* Centralized configuration via RestClientHttpServiceGroupConfigurer
+* Consistent logging with method name context
+* Easy mocking for unit tests
+
+== Architecture
+
+[mermaid]
+----
+graph TB
+    subgraph Application Layer
+        Service[TodoService]
+        Client[TodoClient Interface<br/>@HttpExchange]
+    end
+
+    subgraph Infrastructure Layer
+        Config[TodoClientConfig<br/>@ImportHttpServices]
+        Aspect[HttpExchangeMethodAspect]
+        Interceptor[HttpLoggingInterceptor]
+        RestClient[RestClient Bean]
+    end
+
+    subgraph External
+        API[External REST API<br/>jsonplaceholder.typicode.com]
+    end
+
+    Service -->|Injects| Client
+    Client -->|Registered by| Config
+    Config -->|Configures| RestClient
+    Aspect -->|Captures method name| Client
+    RestClient -->|Uses| Interceptor
+    Interceptor -->|Reads| Aspect
+    RestClient -->|HTTP Request| API
+
+    style Client fill:#e1f5fe
+    style Config fill:#fff3e0
+    style Aspect fill:#f3e5f5
+    style Interceptor fill:#f3e5f5
+----
+
+== Step-by-Step Guide
+
+=== Step 1: Define @HttpExchange Interface
+
+Create an interface annotated with `@HttpExchange` to declare HTTP operations.
+
+.modules/application/todo-application/src/main/kotlin/com/myrealtrip/todoapplication/client/TodoClient.kt
+[source,kotlin]
+----
+package com.myrealtrip.todoapplication.client
+
+import com.myrealtrip.todoapplication.client.dto.TodoDto
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.service.annotation.DeleteExchange
+import org.springframework.web.service.annotation.GetExchange
+import org.springframework.web.service.annotation.HttpExchange
+import org.springframework.web.service.annotation.PostExchange
+import org.springframework.web.service.annotation.PutExchange
+
+@HttpExchange("/todos") // <1>
+interface TodoClient {
+
+    @GetExchange // <2>
+    fun fetchAll(): List<TodoDto>
+
+    @GetExchange("/{id}") // <3>
+    fun findById(@PathVariable id: Int): TodoDto
+
+    @PostExchange
+    fun create(@RequestBody todo: TodoDto): TodoDto
+
+    @PutExchange("/{id}")
+    fun update(@PathVariable id: Int, @RequestBody todo: TodoDto): TodoDto
+
+    @DeleteExchange("/{id}")
+    fun delete(@PathVariable id: Int)
+}
+----
+<1> Base path for all endpoints
+<2> Maps to `GET /todos`
+<3> Maps to `GET /todos/{id}`
+
+.Available HTTP Exchange Annotations
+[cols="1,2,2"]
+|===
+|Annotation |HTTP Method |Usage
+
+|@GetExchange
+|GET
+|Retrieve resources
+
+|@PostExchange
+|POST
+|Create resources
+
+|@PutExchange
+|PUT
+|Update resources (full replacement)
+
+|@PatchExchange
+|PATCH
+|Partial update
+
+|@DeleteExchange
+|DELETE
+|Delete resources
+|===
+
+=== Step 2: Create Configuration with @ImportHttpServices
+
+Register the HTTP client interface using `@ImportHttpServices` and configure it with `RestClientHttpServiceGroupConfigurer`.
+
+.modules/application/todo-application/src/main/kotlin/com/myrealtrip/todoapplication/client/TodoClientConfig.kt
+[source,kotlin]
+----
+package com.myrealtrip.todoapplication.client
+
+import com.myrealtrip.infrastructure.client.HttpLoggingInterceptor
+import com.myrealtrip.infrastructure.client.HttpLoggingInterceptor.Level
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
+import org.springframework.web.client.support.RestClientHttpServiceGroupConfigurer
+import org.springframework.web.service.registry.ImportHttpServices
+
+@Configuration
+@ImportHttpServices(
+    group = "jsonplaceholder", // <1>
+    types = [TodoClient::class]
+)
+class TodoClientConfig {
+
+    @Bean
+    fun todoClientGroupConfigurer(): RestClientHttpServiceGroupConfigurer { // <2>
+        return RestClientHttpServiceGroupConfigurer { groups ->
+            groups.filterByName("jsonplaceholder") // <3>
+                .forEachClient { _, builder ->
+                    builder.baseUrl("https://jsonplaceholder.typicode.com") // <4>
+                        .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                        .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .requestInterceptor(HttpLoggingInterceptor("TodoClient", Level.SIMPLE)) // <5>
+                }
+        }
+    }
+}
+----
+<1> Group name for organizing related HTTP clients
+<2> Bean that configures all clients in the group
+<3> Filter by group name to configure specific clients
+<4> Base URL for all endpoints (combined with `@HttpExchange` path)
+<5> Add logging interceptor with client name and log level
+
+.Group Naming Convention
+[TIP]
+====
+Use meaningful group names that represent the external service:
+
+* `jsonplaceholder` - JSONPlaceholder API
+* `github` - GitHub API
+* `payment` - Payment gateway
+* `notification` - Notification service
+====
+
+=== Step 3: Configure HttpLoggingInterceptor
+
+The `HttpLoggingInterceptor` provides two logging levels: `SIMPLE` and `FULL`.
+
+.Logging Levels
+[cols="1,3,2"]
+|===
+|Level |What is Logged |Use Case
+
+|SIMPLE
+|Request/response line + byte count
+|Production, general monitoring
+
+|FULL
+|Request/response line + headers + body
+|Development, debugging
+|===
+
+.Example: SIMPLE Level Logging
+[source,kotlin]
+----
+HttpLoggingInterceptor("TodoClient", Level.SIMPLE)
+----
+
+.Output (SIMPLE)
+[source,text]
+----
+[TodoClient#fetchAll] ---> GET https://jsonplaceholder.typicode.com/todos
+[TodoClient#fetchAll] ---> END (0-byte body)
+[TodoClient#fetchAll] <--- 200 OK (234ms)
+[TodoClient#fetchAll] <--- END (5645-byte body)
+----
+
+.Example: FULL Level Logging
+[source,kotlin]
+----
+HttpLoggingInterceptor("TodoClient", Level.FULL)
+----
+
+.Output (FULL)
+[source,text]
+----
+[TodoClient#findById] ---> GET https://jsonplaceholder.typicode.com/todos/1
+[TodoClient#findById] ---> Accept: application/json
+[TodoClient#findById] ---> Content-Type: application/json
+[TodoClient#findById] ---> END (0-byte body)
+[TodoClient#findById] <--- 200 OK (156ms)
+[TodoClient#findById] <--- Content-Type: application/json; charset=utf-8
+[TodoClient#findById] <--- {
+  "id": 1,
+  "title": "delectus aut autem",
+  "completed": false
+}
+[TodoClient#findById] <--- END (83-byte body)
+----
+
+=== Step 4: Method Name Capture with HttpExchangeMethodAspect
+
+The `HttpExchangeMethodAspect` captures the actual method name from the interface to provide meaningful log tags.
+
+.How It Works
+[mermaid]
+----
+sequenceDiagram
+    participant S as TodoService
+    participant A as HttpExchangeMethodAspect
+    participant C as TodoClient Proxy
+    participant T as HttpExchangeMethodContext<br/>(ThreadLocal)
+    participant I as HttpLoggingInterceptor
+    participant API as External API
+
+    S->>C: fetchAll()
+    C->>A: @Around intercept
+    A->>T: set("fetchAll")
+    A->>C: proceed()
+    C->>I: intercept(request, body, execution)
+    I->>T: get() -> "fetchAll"
+    I->>I: buildTag() -> "[TodoClient#fetchAll]"
+    I->>API: execute(request)
+    API-->>I: response
+    I->>T: clear()
+    A->>T: clear()
+    I-->>C: response
+    C-->>S: List<TodoDto>
+----
+
+.modules/infrastructure/src/main/kotlin/com/myrealtrip/infrastructure/client/HttpExchangeMethodAspect.kt
+[source,kotlin]
+----
+package com.myrealtrip.infrastructure.client
+
+import org.aspectj.lang.ProceedingJoinPoint
+import org.aspectj.lang.annotation.Around
+import org.aspectj.lang.annotation.Aspect
+import org.springframework.stereotype.Component
+
+@Aspect
+@Component
+class HttpExchangeMethodAspect {
+
+    @Around("@within(org.springframework.web.service.annotation.HttpExchange)") // <1>
+    fun captureMethodName(joinPoint: ProceedingJoinPoint): Any? {
+        HttpExchangeMethodContext.set(joinPoint.signature.name) // <2>
+        return try {
+            joinPoint.proceed() // <3>
+        } finally {
+            HttpExchangeMethodContext.clear() // <4>
+        }
+    }
+}
+----
+<1> Intercept all methods in classes annotated with `@HttpExchange`
+<2> Store method name in ThreadLocal before execution
+<3> Execute the actual HTTP call
+<4> Clean up ThreadLocal after execution (prevents memory leaks)
+
+.modules/infrastructure/src/main/kotlin/com/myrealtrip/infrastructure/client/HttpExchangeMethodContext.kt
+[source,kotlin]
+----
+package com.myrealtrip.infrastructure.client
+
+object HttpExchangeMethodContext {
+
+    private val methodName = ThreadLocal<String>()
+
+    fun set(name: String) = methodName.set(name)
+
+    fun get(): String? = methodName.get()
+
+    fun clear() = methodName.remove()
+}
+----
+
+.Log Tag Format
+[source,text]
+----
+[ClientName#methodName] ---> REQUEST
+[ClientName#methodName] <--- RESPONSE
+----
+
+[IMPORTANT]
+====
+**ThreadLocal Cleanup**: The aspect ensures `clear()` is called in a `finally` block to prevent memory leaks and incorrect method name association in multi-threaded environments.
+====
+
+== RestClient Configuration
+
+The default `RestClient` bean provides common JSON headers for all HTTP clients.
+
+.modules/infrastructure/src/main/kotlin/com/myrealtrip/infrastructure/client/RestClientConfig.kt
+[source,kotlin]
+----
+package com.myrealtrip.infrastructure.client
+
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
+import org.springframework.web.client.RestClient
+
+@Configuration
+class RestClientConfig {
+
+    @Bean
+    @Primary
+    fun defaultRestClient(restClientBuilder: RestClient.Builder): RestClient { // <1>
+        return restClientBuilder
+            .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE) // <2>
+            .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+            .requestInterceptor(HttpLoggingInterceptor()) // <3>
+            .build()
+    }
+}
+----
+<1> Uses auto-configured `RestClient.Builder` from Spring Boot
+<2> Default JSON headers for all requests
+<3> Default logging interceptor (SIMPLE level, generic name)
+
+.Default vs Group-Specific Configuration
+[NOTE]
+====
+* **Default RestClient**: Used when no group-specific configuration is provided
+* **Group-Specific Configuration**: Overrides defaults for specific HTTP clients via `RestClientHttpServiceGroupConfigurer`
+* Each group can have its own base URL, headers, interceptors, and timeout settings
+====
+
+== Logging Architecture
+
+=== BufferingClientHttpResponseWrapper
+
+The `HttpLoggingInterceptor` uses `BufferingClientHttpResponseWrapper` to cache the response body for logging without consuming it.
+
+.Problem Without Buffering
+[source,text]
+----
+InputStream can only be read once
+→ Logging consumes the stream
+→ Application code cannot read response
+→ Error: Stream closed
+----
+
+.Solution: BufferingClientHttpResponseWrapper
+[source,kotlin]
+----
+private class BufferingClientHttpResponseWrapper(
+    private val delegate: ClientHttpResponse
+) : ClientHttpResponse by delegate {
+
+    private val cachedBody: ByteArray by lazy { delegate.body.readAllBytes() } // <1>
+
+    val bodyAsString: String get() = cachedBody.decodeToString()
+
+    override fun getBody() = cachedBody.inputStream() // <2>
+}
+----
+<1> Cache the entire response body on first access
+<2> Return a new InputStream from cached bytes (can be read multiple times)
+
+.Sequence Diagram
+[mermaid]
+----
+sequenceDiagram
+    participant I as HttpLoggingInterceptor
+    participant W as BufferingWrapper
+    participant R as Original Response
+    participant A as Application
+
+    I->>R: execute(request)
+    R-->>I: ClientHttpResponse
+    I->>W: wrap(response)
+    I->>W: getBodyAsString()
+    W->>R: body.readAllBytes()
+    R-->>W: byte[]
+    W->>W: cache byte[]
+    I->>I: log(body)
+    I-->>A: return wrapped response
+    A->>W: getBody()
+    W-->>A: new InputStream(cachedBytes)
+----
+
+=== Logging Flow
+
+.modules/infrastructure/src/main/kotlin/com/myrealtrip/infrastructure/client/HttpLoggingInterceptor.kt (simplified)
+[source,kotlin]
+----
+override fun intercept(
+    request: HttpRequest,
+    body: ByteArray,
+    execution: ClientHttpRequestExecution
+): ClientHttpResponse {
+    val tag = buildTag(request) // <1>
+
+    // Log request
+    log("$tag ---> ${request.method} ${request.uri}")
+    if (level == Level.FULL) {
+        request.headers.log(::log)
+        if (body.isNotEmpty()) log(body.decodeToString())
+    }
+    log("$tag ---> END (${body.size}-byte body)")
+
+    // Execute request
+    val startTime = System.currentTimeMillis()
+    val response = BufferingClientHttpResponseWrapper(execution.execute(request, body)) // <2>
+    val elapsedTime = System.currentTimeMillis() - startTime
+
+    // Log response
+    log("$tag <--- ${response.statusCode} (${elapsedTime}ms)")
+    val responseBody = response.bodyAsString // <3>
+    if (level == Level.FULL) {
+        response.headers.log(::log)
+        if (responseBody.isNotEmpty()) log(responseBody)
+    }
+    log("$tag <--- END (${responseBody.length}-byte body)")
+
+    return response
+}
+
+private fun buildTag(request: HttpRequest): String {
+    val methodName = HttpExchangeMethodContext.get() ?: inferMethodName(request) // <4>
+    return "[$clientName#$methodName]"
+}
+
+private fun inferMethodName(request: HttpRequest): String {
+    return request.method.name().lowercase() // <5>
+}
+----
+<1> Build log tag with client name and method name
+<2> Wrap response to enable body caching
+<3> Read cached body for logging (doesn't consume original stream)
+<4> Get method name from ThreadLocal (set by aspect)
+<5> Fallback: use HTTP method name if aspect didn't capture method name
+
+== Adding a New HTTP Client
+
+=== Checklist
+
+Follow these steps to add a new HTTP client to the project:
+
+.Step 1: Create DTO Package
+[source,text]
+----
+modules/application/my-application/
+└── src/main/kotlin/com/myrealtrip/myapplication/client/dto/
+    └── MyDto.kt
+----
+
+.Step 2: Create @HttpExchange Interface
+[source,kotlin]
+----
+package com.myrealtrip.myapplication.client
+
+import com.myrealtrip.myapplication.client.dto.MyDto
+import org.springframework.web.service.annotation.GetExchange
+import org.springframework.web.service.annotation.HttpExchange
+
+@HttpExchange("/api/v1/resources")
+interface MyClient {
+
+    @GetExchange
+    fun fetchAll(): List<MyDto>
+
+    @GetExchange("/{id}")
+    fun findById(@PathVariable id: Long): MyDto
+}
+----
+
+.Step 3: Create Configuration with @ImportHttpServices
+[source,kotlin]
+----
+package com.myrealtrip.myapplication.client
+
+import com.myrealtrip.infrastructure.client.HttpLoggingInterceptor
+import com.myrealtrip.infrastructure.client.HttpLoggingInterceptor.Level
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.web.client.support.RestClientHttpServiceGroupConfigurer
+import org.springframework.web.service.registry.ImportHttpServices
+
+@Configuration
+@ImportHttpServices(
+    group = "myservice", // <1>
+    types = [MyClient::class]
+)
+class MyClientConfig {
+
+    @Bean
+    fun myClientGroupConfigurer(): RestClientHttpServiceGroupConfigurer {
+        return RestClientHttpServiceGroupConfigurer { groups ->
+            groups.filterByName("myservice")
+                .forEachClient { _, builder ->
+                    builder.baseUrl("https://api.example.com") // <2>
+                        .requestInterceptor(HttpLoggingInterceptor("MyClient", Level.SIMPLE)) // <3>
+                }
+        }
+    }
+}
+----
+<1> Choose a unique group name for your service
+<2> Configure base URL
+<3> Add logging interceptor with appropriate log level
+
+.Step 4: Use in Application Service
+[source,kotlin]
+----
+package com.myrealtrip.myapplication.service
+
+import com.myrealtrip.myapplication.client.MyClient
+import org.springframework.stereotype.Service
+
+@Service
+class MyService(
+    private val myClient: MyClient // <1>
+) {
+    fun fetchAll() = myClient.fetchAll()
+}
+----
+<1> Inject the HTTP client interface directly
+
+.Step 5: Verify Logging
+[source,text]
+----
+# Start the application and check logs
+./gradlew :modules:bootstrap:skeleton-api-app:bootRun
+
+# Expected log output:
+[MyClient#fetchAll] ---> GET https://api.example.com/api/v1/resources
+[MyClient#fetchAll] ---> END (0-byte body)
+[MyClient#fetchAll] <--- 200 OK (123ms)
+[MyClient#fetchAll] <--- END (1234-byte body)
+----
+
+== Configuration Options
+
+=== RestClient.Builder Options
+
+[cols="1,2,2"]
+|===
+|Option |Description |Example
+
+|baseUrl()
+|Base URL for all requests
+|`.baseUrl("https://api.example.com")`
+
+|defaultHeader()
+|Add default header to all requests
+|`.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer token")`
+
+|requestInterceptor()
+|Add request/response interceptor
+|`.requestInterceptor(HttpLoggingInterceptor())`
+
+|defaultStatusHandler()
+|Handle specific HTTP status codes
+|`.defaultStatusHandler(HttpStatusCode::is4xxClientError, handler)`
+
+|requestFactory()
+|Configure underlying HTTP client
+|`.requestFactory(HttpComponentsClientHttpRequestFactory())`
+|===
+
+=== Timeout Configuration
+
+[source,kotlin]
+----
+import org.springframework.boot.web.client.ClientHttpRequestFactories
+import org.springframework.boot.web.client.ClientHttpRequestFactorySettings
+import java.time.Duration
+
+@Bean
+fun myClientGroupConfigurer(): RestClientHttpServiceGroupConfigurer {
+    return RestClientHttpServiceGroupConfigurer { groups ->
+        val settings = ClientHttpRequestFactorySettings.DEFAULTS
+            .withConnectTimeout(Duration.ofSeconds(5))
+            .withReadTimeout(Duration.ofSeconds(10))
+
+        val requestFactory = ClientHttpRequestFactories
+            .get(settings)
+
+        groups.filterByName("myservice")
+            .forEachClient { _, builder ->
+                builder.baseUrl("https://api.example.com")
+                    .requestFactory(requestFactory)
+            }
+    }
+}
+----
+
+=== Error Handling
+
+[source,kotlin]
+----
+import org.springframework.web.client.HttpClientErrorException
+import org.springframework.web.client.HttpServerErrorException
+
+@Service
+class MyService(private val myClient: MyClient) {
+
+    fun fetchAll(): List<MyDto> {
+        return try {
+            myClient.fetchAll()
+        } catch (e: HttpClientErrorException) {
+            logger.error { "Client error: ${e.statusCode} - ${e.responseBodyAsString}" }
+            throw BizRuntimeException(ErrorCode.EXTERNAL_API_ERROR, "Failed to fetch data")
+        } catch (e: HttpServerErrorException) {
+            logger.error { "Server error: ${e.statusCode}" }
+            throw BizRuntimeException(ErrorCode.EXTERNAL_API_ERROR, "External service unavailable")
+        }
+    }
+}
+----
+
+== Best Practices
+
+=== 1. Use Meaningful Group Names
+
+[source,kotlin]
+----
+// Good: Descriptive group names
+@ImportHttpServices(group = "github", types = [GitHubClient::class])
+@ImportHttpServices(group = "payment-gateway", types = [PaymentClient::class])
+
+// Bad: Generic or unclear names
+@ImportHttpServices(group = "client1", types = [MyClient::class])
+@ImportHttpServices(group = "api", types = [SomeClient::class])
+----
+
+=== 2. Use SIMPLE Logging in Production
+
+[source,kotlin]
+----
+// Production: SIMPLE level (reduces log volume)
+HttpLoggingInterceptor("PaymentClient", Level.SIMPLE)
+
+// Development: FULL level (for debugging)
+HttpLoggingInterceptor("PaymentClient", Level.FULL)
+----
+
+=== 3. Separate DTOs from Domain Models
+
+[source,text]
+----
+modules/application/my-application/
+├── client/
+│   ├── MyClient.kt           # HTTP client interface
+│   ├── MyClientConfig.kt     # Configuration
+│   └── dto/                  # External API DTOs
+│       └── MyExternalDto.kt
+└── service/
+    ├── MyService.kt          # Application service
+    └── MyDomain.kt           # Domain model (separate from DTO)
+----
+
+=== 4. Centralize Error Handling
+
+[source,kotlin]
+----
+abstract class BaseHttpClient {
+    protected inline fun <T> executeWithErrorHandling(
+        block: () -> T
+    ): T {
+        return try {
+            block()
+        } catch (e: HttpClientErrorException) {
+            handleClientError(e)
+        } catch (e: HttpServerErrorException) {
+            handleServerError(e)
+        }
+    }
+}
+
+@Service
+class MyService(private val myClient: MyClient) : BaseHttpClient() {
+    fun fetchAll() = executeWithErrorHandling { myClient.fetchAll() }
+}
+----
+
+=== 5. Document External API Dependencies
+
+[source,kotlin]
+----
+/**
+ * Client for JSONPlaceholder API.
+ *
+ * Base URL: https://jsonplaceholder.typicode.com
+ * Documentation: https://jsonplaceholder.typicode.com/guide/
+ *
+ * Rate Limit: None
+ * Authentication: Not required
+ */
+@HttpExchange("/todos")
+interface TodoClient {
+    // ...
+}
+----
+
+== Testing
+
+=== Unit Testing with Mockito
+
+[source,kotlin]
+----
+import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+
+class TodoServiceTest {
+
+    private val todoClient: TodoClient = mock()
+    private val todoService = TodoService(todoClient)
+
+    @Test
+    fun `should fetch all todos`() {
+        // given
+        val expected = listOf(TodoDto(id = 1, title = "Test", completed = false))
+        whenever(todoClient.fetchAll()).thenReturn(expected)
+
+        // when
+        val result = todoService.fetchAll()
+
+        // then
+        assertThat(result).isEqualTo(expected)
+        verify(todoClient).fetchAll()
+    }
+}
+----
+
+=== Integration Testing with WireMock
+
+[source,kotlin]
+----
+import com.github.tomakehurst.wiremock.client.WireMock.*
+import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.cloud.contract.wiremock.AutoConfigureWireMock
+
+@SpringBootTest
+@AutoConfigureWireMock(port = 0)
+class TodoClientIntegrationTest {
+
+    @Autowired
+    private lateinit var todoClient: TodoClient
+
+    @Test
+    fun `should fetch todos from external API`() {
+        // given
+        stubFor(
+            get(urlEqualTo("/todos"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""[{"id":1,"title":"Test","completed":false}]""")
+                )
+        )
+
+        // when
+        val result = todoClient.fetchAll()
+
+        // then
+        assertThat(result).hasSize(1)
+        assertThat(result[0].title).isEqualTo("Test")
+    }
+}
+----
+
+== Troubleshooting
+
+=== Method Name Not Appearing in Logs
+
+.Problem
+[source,text]
+----
+[TodoClient#get] ---> GET /todos/1  # Expected: [TodoClient#findById]
+----
+
+.Cause
+* `HttpExchangeMethodAspect` is not registered or not enabled
+* AspectJ is not properly configured
+
+.Solution
+[source,kotlin]
+----
+// Ensure @EnableAspectJAutoProxy is present in main application
+@SpringBootApplication
+@EnableAspectJAutoProxy
+class Application
+
+// Verify HttpExchangeMethodAspect is a Spring bean
+@Aspect
+@Component
+class HttpExchangeMethodAspect {
+    // ...
+}
+----
+
+=== Response Body Consumed Error
+
+.Problem
+[source,text]
+----
+java.io.IOException: Stream closed
+    at BufferedInputStream.read()
+----
+
+.Cause
+* Response body read multiple times without buffering
+
+.Solution
+* The `BufferingClientHttpResponseWrapper` should handle this automatically
+* Ensure the interceptor is registered correctly
+
+=== Timeout Configuration Not Applied
+
+.Problem
+* Requests time out despite configured timeout settings
+
+.Cause
+* Timeout configuration not applied to the correct group
+
+.Solution
+[source,kotlin]
+----
+// Ensure you're filtering the correct group name
+groups.filterByName("myservice") // <-- Must match @ImportHttpServices(group = "myservice")
+----
+
+== Summary
+
+.Key Points
+* Use `@HttpExchange` for declarative HTTP client interfaces
+* Register clients with `@ImportHttpServices` and group names
+* Configure via `RestClientHttpServiceGroupConfigurer`
+* `HttpExchangeMethodAspect` captures method names for logging
+* `HttpLoggingInterceptor` provides SIMPLE/FULL logging levels
+* `BufferingClientHttpResponseWrapper` enables response body caching
+* Default `RestClient` bean provides JSON headers
+
+.Related Documentation
+* xref:01-architecture-overview.adoc[Architecture Overview]
+* xref:02-application-layer.adoc[Application Layer]
+* xref:03-infrastructure-layer.adoc[Infrastructure Layer]

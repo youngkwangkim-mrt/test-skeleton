@@ -1,0 +1,206 @@
+# ####################
+# 버전 정의 
+# ####################
+[versions]
+# Spring
+spring-dependency-management = "1.1.7"
+spring-boot = "4.0.2"
+spring-cloud = "2025.1.1"
+
+# Kotlin
+java = "25"
+kotlin = "2.3.10"
+kotlinx-coroutines = "1.10.2"
+kotlin-logging = "7.0.13"
+
+# Third-party (not managed by Spring BOM)
+libphonenumber = "9.0.23"
+slack-api = "1.47.0"
+poi = "5.5.1"
+querydsl = "7.1"
+redisson = "4.2.0"
+lz4 = "1.10.3"
+kotest = "6.1.3"
+springdoc = "3.0.1"
+mockk = "1.14.9"
+
+# ####################
+# 라이브러리 정의
+# ####################
+[libraries]
+# Kotlin
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-reactor = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-reactor", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-slf4j = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j", version.ref = "kotlinx-coroutines" }
+kotlin-logging-jvm = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
+
+# Spring Boot
+spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter", version.ref = "spring-boot" }
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc", version.ref = "spring-boot" }
+spring-boot-starter-webflux = { module = "org.springframework.boot:spring-boot-starter-webflux", version.ref = "spring-boot" }
+spring-boot-starter-aspectj = { module = "org.springframework.boot:spring-boot-starter-aspectj", version.ref = "spring-boot" }
+spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation", version.ref = "spring-boot" }
+spring-boot-starter-cache = { module = "org.springframework.boot:spring-boot-starter-cache", version.ref = "spring-boot" }
+spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa", version.ref = "spring-boot" }
+spring-boot-starter-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis", version.ref = "spring-boot" }
+spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator", version.ref = "spring-boot" }
+spring-boot-starter-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry", version.ref = "spring-boot" }
+spring-boot-starter-restclient = { module = "org.springframework.boot:spring-boot-starter-restclient", version.ref = "spring-boot" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test", version.ref = "spring-boot" }
+spring-boot-restclient = { module = "org.springframework.boot:spring-boot-restclient", version.ref = "spring-boot" }
+spring-boot-micrometer-tracing-brave = { module = "org.springframework.boot:spring-boot-micrometer-tracing-brave", version.ref = "spring-boot" }
+spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
+spring-boot-annotation-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
+spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-docker-compose", version.ref = "spring-boot" }
+spring-data-commons = { module = "org.springframework.data:spring-data-commons", version.ref = "spring-boot" }
+
+# Spring Cloud
+spring-cloud-starter-openfeign = { module = "org.springframework.cloud:spring-cloud-starter-openfeign", version.ref = "spring-cloud" }
+
+# JPA & QueryDSL
+querydsl-jpa = { module = "io.github.openfeign.querydsl:querydsl-jpa", version.ref = "querydsl" }
+querydsl-apt = { module = "io.github.openfeign.querydsl:querydsl-apt", version.ref = "querydsl" }
+jakarta-persistence-api = { module = "jakarta.persistence:jakarta.persistence-api" }
+jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
+
+# Database (managed by Spring BOM)
+h2 = { module = "com.h2database:h2" }
+mysql = { module = "com.mysql:mysql-connector-j" }
+
+# Apache POI (Excel)
+poi-ooxml = { module = "org.apache.poi:poi-ooxml", version.ref = "poi" }
+
+# Phone Number
+libphonenumber = { module = "com.googlecode.libphonenumber:libphonenumber", version.ref = "libphonenumber" }
+
+# Slack SDK
+slack-api-client = { module = "com.slack.api:slack-api-client", version.ref = "slack-api" }
+
+# Cache
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
+redisson-spring-boot-starter = { module = "org.redisson:redisson-spring-boot-starter", version.ref = "redisson" }
+redisson-spring-cache = { module = "org.redisson:redisson-spring-cache", version.ref = "redisson" }
+lz4-java = { module = "at.yawk.lz4:lz4-java", version.ref = "lz4" }
+
+# Jackson (managed by Spring BOM)
+jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
+jackson-datatype-jsr310 = { module = "tools.jackson.datatype:jackson-datatype-jsr310" }
+
+# Lombok (managed by Spring BOM)
+lombok = { module = "org.projectlombok:lombok" }
+
+# Documentation
+springdoc-openapi-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+
+# Monitoring & Metrics (managed by Spring BOM)
+micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+micrometer-tracing-bridge-brave = { module = "io.micrometer:micrometer-tracing-bridge-brave" }
+micrometer-tracing-bridge-otel = { module = "io.micrometer:micrometer-tracing-bridge-otel" }
+
+# Testing
+kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest" }
+kotest-extensions-spring = { module = "io.kotest:kotest-extensions-spring", version.ref = "kotest" }
+mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version = "5.4.0" }
+spring-restdocs = { module = "org.springframework.restdocs:spring-restdocs-mockmvc" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+
+# ####################
+# 라이브러리 묶음
+# ####################
+[bundles]
+kotlin = [
+    "kotlin-reflect",
+    "kotlin-stdlib",
+    "kotlinx-coroutines-core",
+    "kotlinx-coroutines-slf4j",
+    "kotlin-logging-jvm"
+]
+
+spring-web = [
+    "spring-boot-starter-webmvc",
+    "spring-boot-starter-validation",
+    "spring-boot-starter-aspectj",
+    "spring-boot-configuration-processor",
+    "spring-boot-annotation-processor",
+    "spring-data-commons"
+]
+
+spring-webflux = [
+    "spring-boot-starter-webflux",
+    "kotlinx-coroutines-reactor",
+    "spring-boot-starter-validation",
+    "spring-boot-starter-aspectj"
+]
+
+spring-data = [
+    "spring-boot-starter-data-jpa",
+    "querydsl-jpa",
+    "querydsl-apt",
+    "jakarta-persistence-api",
+    "jakarta-annotation-api"
+]
+
+jackson = [
+    "jackson-module-kotlin",
+#    "jackson-datatype-jsr310"
+]
+
+cache = [
+    "spring-boot-starter-cache",
+    "caffeine",
+    "redisson-spring-boot-starter",
+    "redisson-spring-cache",
+    "lz4-java"
+]
+
+test = [
+    "spring-boot-starter-test",
+    "kotest-runner-junit5",
+    "kotest-assertions-core",
+    "kotest-property",
+    "kotest-extensions-spring",
+    "mockito-kotlin",
+    #    "h2"
+]
+
+test-fixtures = [
+    "spring-boot-starter-test",
+    "spring-boot-starter-webmvc",
+    "spring-data-commons",
+    "spring-restdocs",
+    "kotest-runner-junit5",
+    "kotest-assertions-core",
+    "kotest-property",
+    "kotest-extensions-spring",
+    "mockito-kotlin",
+    "mockk",
+]
+
+openapi = [
+    "springdoc-openapi-ui",
+    #    "springdoc-openapi-kotlin"
+]
+
+metrics = [
+    "spring-boot-starter-actuator",
+    "spring-boot-micrometer-tracing-brave",
+    "micrometer-tracing-bridge-brave",
+    #    "spring-boot-starter-opentelemetry",
+    #    "micrometer-tracing-bridge-otel",
+    #    "micrometer-registry-prometheus",
+]
+
+# ####################
+# 플러그인 정의
+# ####################
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+kotlin-jpa = { id = "org.jetbrains.kotlin.plugin.jpa", version.ref = "kotlin" }
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }

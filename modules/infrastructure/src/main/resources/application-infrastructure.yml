@@ -1,0 +1,65 @@
+# =====================================================================================================================
+# default (all profiles)
+# =====================================================================================================================
+spring:
+  http:
+    clients:
+      connect-timeout: 3s
+      read-timeout: 30s
+
+slack:
+  enabled: true
+  bot-token: ${SLACK_BOT_TOKEN}
+  default-channel: "#general"
+  retry:
+    max-attempts: 3
+    backoff-ms: 1000
+    max-backoff-ms: 10000
+
+# =====================================================================================================================
+# local, dev
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: embed,local,dev,dev01,dev02
+  #
+  docker:
+    compose:
+      enabled: true
+      file: modules/infrastructure/docker-compose.yml
+      #      lifecycle-management: start_and_stop
+      lifecycle-management: start_only
+  #    
+  redis:
+    redisson:
+      file: classpath:redisson-dev.yml
+  #
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+    hikari:
+      pool-name: "${spring.application.name}-dev-cp"
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 600000
+      minimum-idle: 2
+      maximum-pool-size: 10
+  jpa:
+    #    show-sql: true
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        #        show_sql: false
+        format_sql: false
+        default_batch_fetch_size: 500
+        order_updates: true
+        order_inserts: true
+        jdbc:
+          batch_size: 500
+          generate-ddl: false
+    open-in-view: false

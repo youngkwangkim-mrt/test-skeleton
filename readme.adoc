@@ -1,0 +1,374 @@
+= Spring Boot Skeleton
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectlinks:
+:sectnums:
+
+image:https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white[Java]
+image:https://img.shields.io/badge/Kotlin-2.3.10-7F52FF?logo=kotlin&logoColor=white[Kotlin]
+image:https://img.shields.io/badge/Spring%20Boot-4.0.2-6DB33F?logo=springboot&logoColor=white[Spring Boot]
+
+== 개요
+
+Spring Boot 4.x와 Kotlin 2.x 기반 멀티 모듈 스켈레톤입니다.
+의존성 방향 제어와 레이어 분리 원칙에 따라 모듈을 구성합니다.
+
+새 프로젝트를 시작하려면 이 저장소를 복제하세요.
+
+=== 기술 스택
+
+|===
+|기술 |버전 |비고
+
+|Spring Boot
+|4.x
+|
+
+|Kotlin
+|2.x
+|
+
+|Gradle
+|9.x
+|Version Catalog 사용
+
+|JDK
+|25
+|Virtual Thread 지원
+|===
+
+== 프로젝트 구조
+
+[source]
+----
+modules/
+├── common/                     # 공통 유틸리티, 예외, 코드
+├── common-web/                 # 웹 공통 (Filter, Interceptor, Handler)
+├── test-support/               # 테스트 픽스처, REST Docs 지원
+├── domain/                     # 도메인 모델, 비즈니스 규칙, 포트 인터페이스
+├── infrastructure/             # DB, Cache, HTTP Client, 리포지토리 어댑터
+├── bootstrap/                  # Spring Boot 앱 모듈
+│   ├── common-api-app/         # 공통 API 서버 (Controller, Facade)
+│   ├── skeleton-api-app/       # API 서버
+│   └── skeleton-worker-app/    # Worker 서버
+└── docs/                       # REST Docs 문서 생성
+----
+
+=== 모듈 의존성 구조
+
+[source]
+----
+┌──────────────────────────────────────────────────────────────┐
+│                          Bootstrap                           │
+│    (common-api-app, skeleton-api-app, skeleton-worker-app)   │
+│              Controller → Facade → Application               │
+├──────────────────────────────────────────────────────────────┤
+│                         common-web                           │
+│     (Filters, Interceptors, ExceptionHandler, ApiResource)   │
+├────────────────────────────┬─────────────────────────────────┤
+│           Domain           │         Infrastructure          │
+│  (Model, Service, Port)    │   (Adapter, Cache, RestClient)  │
+│  Application (Query/Cmd)   │   implements Domain Ports       │
+├────────────────────────────┴─────────────────────────────────┤
+│                           Common                             │
+│           (Codes, Exceptions, Utils, Extensions)             │
+└──────────────────────────────────────────────────────────────┘
+
+test-support ─── 테스트 픽스처 (common, common-web 의존)
+docs ─────────── REST Docs 문서 생성 (Asciidoctor)
+----
+
+각 레이어의 역할:
+
+* **Bootstrap**: Spring Boot 실행 모듈. Controller → Facade (DTO 변환 + 오케스트레이션)
+* **common-web**: 웹 공통 인프라 (필터, 인터셉터, 예외 처리)
+* **Domain**: 도메인 모델, 비즈니스 규칙, Application (Query/Command), 포트 인터페이스
+* **Infrastructure**: 도메인 포트 구현 (JPA 어댑터), Cache, HTTP Client
+* **Common**: 모든 모듈에서 사용하는 공통 코드
+
+== 모듈 상세
+
+=== common
+
+모든 모듈이 공유하는 유틸리티와 예외 클래스를 제공합니다.
+
+|===
+|패키지 |설명
+
+|`codes`
+|ResponseCode, ErrorCode, SuccessCode
+
+|`exceptions`
+|KnownException, BizException, BizRuntimeException
+
+|`values`
+|Value Objects (Email, Money, PhoneNumber, Rate)
+
+|`utils/datetime`
+|날짜/시간 Range, 포맷팅, 검색 날짜
+
+|`utils/extensions`
+|String, Number, DateTime, UUID, Masking 확장 함수
+
+|`utils/cipher`
+|AES, SEED 암호화
+
+|`utils/codec`
+|URL 인코딩/디코딩
+
+|`utils/coroutine`
+|코루틴 유틸리티
+|===
+
+link:modules/common/readme.adoc[상세 문서 보기]
+
+=== common-web
+
+필터, 인터셉터, 예외 처리 등 웹 공통 인프라를 제공합니다.
+
+|===
+|패키지 |설명
+
+|`filters`
+|ContentCachingFilter, AppTraceFilter (UUID v7 traceId)
+
+|`interceptors`
+|LogInterceptor, LogResponseBodyInterceptor
+
+|`handlers`
+|GlobalExceptionHandlerV2
+
+|`response`
+|ApiResource 표준 응답 포맷
+|===
+
+link:modules/common-web/readme.adoc[상세 문서 보기]
+
+=== domain
+
+도메인 모델, 비즈니스 규칙, 포트 인터페이스를 정의합니다. common 모듈에만 의존합니다.
+
+|===
+|구성 요소 |설명
+
+|`Holiday`
+|공휴일 도메인 모델
+
+|`HolidayRepository`
+|리포지토리 포트 인터페이스 (infrastructure에서 구현)
+
+|`HolidayService`
+|공휴일 비즈니스 로직
+
+|`HolidayQueryApplication`
+|공휴일 조회 유스케이스
+
+|`HolidayCommandApplication`
+|공휴일 생성/수정/삭제 유스케이스
+|===
+
+=== infrastructure
+
+데이터베이스, 캐시, 외부 서비스와 연동합니다.
+
+|===
+|기능 |설명
+
+|HTTP Client
+|RestClient + HttpExchange 로깅
+
+|Cache
+|Caffeine (L1) + Redis (L2) 2단계 캐시
+
+|Redis Functions
+|분산 락, 캐시 Aspect
+
+|Persistence
+|JPA BaseEntity, BaseTimeEntity, QueryDSL
+
+|Slack
+|Slack SDK 기반 알림 (Kotlin DSL 메시지 빌더)
+
+|Export
+|Excel/CSV 파일 내보내기 (어노테이션 기반, 스타일 프리셋)
+|===
+
+link:modules/infrastructure/readme.adoc[상세 문서 보기]
+
+=== bootstrap
+
+Spring Boot 실행 모듈입니다. 모듈명이 `-app`으로 끝나면 Spring Boot 플러그인이 자동 적용됩니다.
+
+|===
+|모듈 |용도
+
+|`common-api-app`
+|공통 API 서버 (Holiday API, 데이터 초기화)
+
+|`skeleton-api-app`
+|REST API 서버
+
+|`skeleton-worker-app`
+|백그라운드 Worker 서버
+|===
+
+=== test-support
+
+테스트 픽스처와 REST Docs 지원을 제공합니다.
+
+|===
+|구성 요소 |설명
+
+|`IntegratedTestSupport`
+|통합 테스트 기반 클래스
+
+|`EndPointTestSupport`
+|API 엔드포인트 테스트 기반 클래스
+
+|`RestDocsSupport`
+|Spring REST Docs Kotlin DSL 지원
+
+|`TestTimeRunner`
+|테스트 시간 측정 유틸리티
+|===
+
+=== docs
+
+Spring REST Docs 기반 API 문서를 생성합니다.
+
+* Asciidoctor 플러그인으로 HTML 문서 생성
+* `common-api-app`, `skeleton-api-app` 테스트에서 생성된 스니펫 수집
+* `./gradlew :modules:docs:docs` 명령으로 문서 생성
+
+== 빠른 시작
+
+=== 빌드
+
+[source,bash]
+----
+./gradlew build
+----
+
+=== 실행
+
+API 서버 실행:
+[source,bash]
+----
+./gradlew :modules:bootstrap:skeleton-api-app:bootRun
+----
+
+Worker 서버 실행:
+[source,bash]
+----
+./gradlew :modules:bootstrap:skeleton-worker-app:bootRun
+----
+
+=== 테스트
+
+[source,bash]
+----
+./gradlew test
+----
+
+=== 문서 생성
+
+[source,bash]
+----
+./gradlew :modules:docs:docs
+----
+
+== 설정
+
+=== gradle.properties
+
+프로젝트 그룹과 버전을 정의합니다.
+
+[source,properties]
+----
+projectGroup=com.myrealtrip
+projectVersion=0.0.1-SNAPSHOT
+----
+
+=== Version Catalog
+
+`gradle/libs.versions.toml`에서 라이브러리 버전을 관리합니다.
+
+* Spring BOM이 관리하는 라이브러리는 버전 생략
+* Third-party 라이브러리만 버전 명시
+
+link:gradle/version-releases.adoc[라이브러리 릴리즈 정보 보기]
+
+== 새 모듈 생성
+
+=== 도메인 기능 추가
+
+도메인 모듈에 새로운 기능을 추가하세요.
+
+[source]
+----
+modules/domain/src/main/kotlin/com/myrealtrip/domain/myfeature/
+├── MyFeature.kt                      # 도메인 모델
+├── MyFeatureRepository.kt            # 포트 인터페이스
+├── MyFeatureService.kt               # 비즈니스 로직
+└── application/
+    ├── MyFeatureQueryApplication.kt   # 조회 유스케이스
+    └── MyFeatureCommandApplication.kt # 커맨드 유스케이스
+----
+
+Infrastructure에 어댑터를 추가하세요.
+
+[source]
+----
+modules/infrastructure/src/main/kotlin/com/myrealtrip/infrastructure/persistence/myfeature/
+├── MyFeatureEntity.kt                # JPA Entity
+├── MyFeatureJpaRepository.kt         # Spring Data JPA
+└── MyFeatureRepositoryAdapter.kt     # 포트 구현
+----
+
+=== Bootstrap 모듈 추가
+
+`-app` 접미사를 가진 모듈은 자동으로 Spring Boot 플러그인이 적용됩니다.
+
+[source]
+----
+modules/bootstrap/my-api-app/
+├── build.gradle.kts
+└── src/main/kotlin/
+    └── com/myrealtrip/myapiapp/
+        ├── api/             # Controller
+        │   └── dto/         # API DTOs
+        ├── facade/          # Facade (DTO 변환 + 오케스트레이션)
+        └── MyApiApplication.kt
+----
+
+=== settings.gradle.kts 수정
+
+모듈을 추가한 후 `settings.gradle.kts`에 등록하세요.
+
+[source,kotlin]
+----
+include(
+    // Foundation
+    "modules:common",
+    "modules:common-web",
+    "modules:test-support",
+
+    // Infrastructure
+    "modules:infrastructure",
+
+    // Core Business
+    "modules:domain",
+
+    // Runtime
+    "modules:bootstrap:common-api-app",
+    "modules:bootstrap:skeleton-api-app",
+    "modules:bootstrap:skeleton-worker-app",
+    "modules:bootstrap:my-api-app",        // 추가
+
+    // Documentation
+    "modules:docs",
+)
+----

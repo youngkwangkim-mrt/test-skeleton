@@ -1,0 +1,721 @@
+= Error Handling Strategy
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+== Overview
+
+The hexagonal-skeleton project implements a structured error handling strategy using a custom exception hierarchy and global exception handling. This approach ensures:
+
+* **Consistent error responses** across all REST APIs
+* **Appropriate logging levels** based on error severity
+* **Clear separation** between expected and unexpected errors
+* **Type-safe error codes** with HTTP status mapping
+
+== Exception Hierarchy
+
+The exception hierarchy is built around the `BizExceptionInfo` interface, which provides common properties for all business exceptions.
+
+[mermaid]
+----
+classDiagram
+    class BizExceptionInfo {
+        <<interface>>
+        +ResponseCode code
+        +String message
+        +boolean logStackTrace
+        +describe() String
+    }
+
+    class BizException {
+        +ResponseCode code
+        +String message
+        +Throwable cause
+        +boolean logStackTrace
+    }
+
+    class BizRuntimeException {
+        +ResponseCode code
+        +String message
+        +Throwable cause
+        +boolean logStackTrace
+    }
+
+    class KnownException {
+        +ResponseCode code
+        +String message
+        +Throwable cause
+    }
+
+    BizExceptionInfo <|.. BizException : implements
+    BizExceptionInfo <|.. BizRuntimeException : implements
+    BizRuntimeException <|-- KnownException : extends
+
+    Exception <|-- BizException
+    RuntimeException <|-- BizRuntimeException
+
+    note for BizException "Checked exception\nRecoverable errors\nCaller must handle"
+    note for BizRuntimeException "Unchecked exception\nUnrecoverable errors\nlogStackTrace configurable"
+    note for KnownException "Expected errors\nNo stack trace\nINFO level logging"
+----
+
+=== BizExceptionInfo Interface
+
+The root interface that defines common properties for all business exceptions:
+
+[source,kotlin]
+----
+interface BizExceptionInfo {
+    val code: ResponseCode
+    val message: String
+    val logStackTrace: Boolean
+
+    fun describe(): String = "${this::class.simpleName}[$code]: $message"
+}
+----
+
+=== BizException (Checked)
+
+Checked business exception for **recoverable** business errors.
+
+[source,kotlin]
+----
+open class BizException @JvmOverloads constructor(
+    override val code: ResponseCode,
+    override val message: String = code.message,
+    override val cause: Throwable? = null,
+    override val logStackTrace: Boolean = false,
+) : Exception(message, cause), BizExceptionInfo
+----
+
+**Use when:**
+
+* The caller is expected to handle the error
+* The error is part of normal business flow
+* Recovery is possible
+
+=== BizRuntimeException (Unchecked)
+
+Unchecked business exception for **unrecoverable** business errors.
+
+[source,kotlin]
+----
+open class BizRuntimeException @JvmOverloads constructor(
+    override val code: ResponseCode,
+    override val message: String = code.message,
+    override val cause: Throwable? = null,
+    override val logStackTrace: Boolean = false,
+) : RuntimeException(message, cause), BizExceptionInfo
+----
+
+**Use when:**
+
+* The error indicates a bug or unexpected condition
+* Recovery is not expected
+* The caller should not be forced to handle it
+
+=== KnownException (Expected Errors)
+
+Exception for **expected/known** error conditions that should not clutter logs.
+
+[source,kotlin]
+----
+open class KnownException @JvmOverloads constructor(
+    override val code: ResponseCode,
+    override val message: String = code.message,
+    cause: Throwable? = null,
+) : BizRuntimeException(
+    code = code,
+    message = message,
+    cause = cause,
+    logStackTrace = false,
+)
+----
+
+**Use when:**
+
+* Resource not found
+* Validation failures
+* User input errors
+* Expected business conditions
+
+The `GlobalExceptionHandlerV2` will **not** log the stack trace for this exception type.
+
+== When to Use Each Exception
+
+[cols="1,2,2,1", options="header"]
+|===
+|Exception Type
+|Use Case
+|Examples
+|Log Level
+
+|`KnownException`
+|Expected errors that are part of normal business flow
+|• User not found +
+• Validation failure +
+• Invalid credentials +
+• Duplicate entry
+|INFO (no stack trace)
+
+|`BizRuntimeException`
+|Unrecoverable business errors that indicate problems
+|• Payment gateway failure +
+• Data inconsistency +
+• Configuration error +
+• External service unavailable
+|ERROR (with stack trace if configured)
+
+|`BizException`
+|Checked recoverable business exceptions
+|• Transaction rollback required +
+• Retry-able operations +
+• Compensating transactions
+|ERROR (with stack trace if configured)
+
+|Standard exceptions
+|Framework/language level errors
+|• `IllegalArgumentException` +
+• `IllegalStateException` +
+• `NoSuchElementException`
+|ERROR (with stack trace)
+|===
+
+=== Decision Tree
+
+[mermaid]
+----
+flowchart TD
+    A[Error Occurred] --> B{Expected error?}
+    B -->|Yes| C{User input related?}
+    B -->|No| D{Recoverable?}
+
+    C -->|Yes| E[KnownException]
+    C -->|No| F[KnownException]
+
+    D -->|Yes| G{Caller must handle?}
+    D -->|No| H[BizRuntimeException<br/>logStackTrace=true]
+
+    G -->|Yes| I[BizException<br/>logStackTrace=true]
+    G -->|No| J[BizRuntimeException<br/>logStackTrace=true]
+
+    E --> K[INFO log<br/>No stack trace]
+    F --> K
+    H --> L[ERROR log<br/>With stack trace]
+    I --> L
+    J --> L
+----
+
+== ResponseCode System
+
+=== ResponseCode Interface
+
+[source,kotlin]
+----
+interface ResponseCode {
+    val status: Int      // HTTP status code
+    val message: String  // Human-readable message
+    val name: String     // Code name (Enum name)
+
+    fun isSuccess(): Boolean = status in 200..299
+    fun isClientError(): Boolean = status in 400..499
+    fun isServerError(): Boolean = status in 500..599
+    fun isError(): Boolean = isClientError() || isServerError()
+    fun description(): String = "[$name] $message"
+}
+----
+
+=== ErrorCode Enum
+
+Predefined error codes with HTTP status mapping:
+
+[cols="2,1,3", options="header"]
+|===
+|Code
+|Status
+|Message
+
+|`UNAUTHORIZED`
+|401
+|인증이 필요합니다.
+
+|`UNAUTHORIZED_IP`
+|401
+|허용되지 않은 IP 입니다.
+
+|`FORBIDDEN`
+|403
+|권한이 없습니다.
+
+|`NOT_FOUND`
+|404
+|요청한 자원을 찾을 수 없습니다.
+
+|`INVALID_ARGUMENT`
+|400
+|요청 인자가 올바르지 않습니다.
+
+|`NOT_READABLE`
+|400
+|요청 메시지가 올바르지 않습니다.
+
+|`ILLEGAL_ARGUMENT`
+|406
+|인자가 올바르지 않습니다.
+
+|`ILLEGAL_STATE`
+|406
+|상태가 올바르지 않습니다.
+
+|`DATA_NOT_FOUND`
+|406
+|요청한 데이터가 없습니다.
+
+|`UNSUPPORTED_OPERATION`
+|406
+|지원하지 않는 기능입니다.
+
+|`DB_ACCESS_ERROR`
+|406
+|데이터베이스 접근 오류입니다.
+
+|`CALL_RESPONSE_ERROR`
+|406
+|상태가 올바르지 않습니다. (외부 오류)
+
+|`SERVER_ERROR`
+|500
+|일시적인 오류입니다. 잠시 후 다시 시도해주세요.
+|===
+
+=== SuccessCode Enum
+
+Predefined success codes:
+
+[cols="2,1,3", options="header"]
+|===
+|Code
+|Status
+|Message
+
+|`SUCCESS`
+|200
+|성공
+
+|`CREATED`
+|201
+|생성 성공
+
+|`ACCEPTED`
+|202
+|접수 성공
+|===
+
+== Precondition Utilities
+
+Utility functions for input validation that throw `KnownException`:
+
+=== knownRequired
+
+Throws `KnownException` if the condition is false (similar to `require`):
+
+[source,kotlin]
+----
+knownRequired(amount > 0) { "Amount must be positive" }
+knownRequired(user.isActive) { "User must be active" }
+----
+
+=== knownRequiredNotNull
+
+Throws `KnownException` if the value is null (similar to `requireNotNull`):
+
+[source,kotlin]
+----
+val user = knownRequiredNotNull(repository.findById(id)) {
+    "User not found: $id"
+}
+----
+
+=== knownNotBlank
+
+Throws `KnownException` if the string is null or blank:
+
+[source,kotlin]
+----
+val name = knownNotBlank(request.name) { "Name is required" }
+val email = knownNotBlank(request.email) { "Email is required" }
+----
+
+=== Benefits
+
+* **Type-safe**: Returns non-null type, enabling smart casts
+* **Consistent**: All validation failures use `KnownException`
+* **Clean logs**: No stack traces for expected validation failures
+
+== GlobalExceptionHandlerV2
+
+Global exception handler that maps exceptions to `ApiResource` responses.
+
+=== Exception Mapping Table
+
+[cols="3,2,2,1", options="header"]
+|===
+|Exception Type
+|Mapped ErrorCode
+|Additional Data
+|Stack Trace
+
+|`KnownException`
+|`e.code`
+|`e.message`
+|No
+
+|`BizRuntimeException`
+|`e.code`
+|`e.message`
+|Configurable
+
+|`BizException`
+|`e.code`
+|`e.message`
+|Configurable
+
+|`MethodArgumentNotValidException`
+|`INVALID_ARGUMENT`
+|Field errors map
+|No
+
+|`MethodArgumentTypeMismatchException`
+|`INVALID_ARGUMENT`
+|Type mismatch detail
+|No
+
+|`MissingRequestValueException`
+|`INVALID_ARGUMENT`
+|Missing parameter detail
+|No
+
+|`MissingServletRequestPartException`
+|`INVALID_ARGUMENT`
+|Missing part detail
+|Yes
+
+|`HandlerMethodValidationException`
+|`INVALID_ARGUMENT`
+|Validation errors map
+|No
+
+|`HttpMessageNotReadableException`
+|`NOT_READABLE`
+|Parse error message
+|No
+
+|`HttpMediaTypeNotSupportedException`
+|`NOT_READABLE`
+|Media type error
+|No
+
+|`NoResourceFoundException`
+|`NOT_FOUND`
+|Exception message
+|Yes
+
+|`HttpRequestMethodNotSupportedException`
+|`NOT_FOUND`
+|Exception message
+|Yes
+
+|`MultipartException`
+|`INVALID_ARGUMENT`
+|Exception message
+|Yes
+
+|`AccessDeniedException`
+|`FORBIDDEN`
+|Exception message
+|Yes
+
+|`IllegalArgumentException`
+|`ILLEGAL_ARGUMENT`
+|Exception message
+|Yes
+
+|`IllegalStateException`
+|`ILLEGAL_STATE`
+|Exception message
+|Yes
+
+|`NoSuchElementException`
+|`DATA_NOT_FOUND`
+|Exception message
+|Yes
+
+|`UnsupportedOperationException`
+|`UNSUPPORTED_OPERATION`
+|Exception message
+|Yes
+
+|All other exceptions
+|`SERVER_ERROR`
+|Default message
+|Yes
+|===
+
+=== Handler Flow
+
+[mermaid]
+----
+flowchart TD
+    A[Exception Thrown] --> B{Exception Type?}
+
+    B -->|KnownException| C[Use e.code<br/>log=false]
+    B -->|BizRuntimeException| D[Use e.code<br/>log=e.logStackTrace]
+    B -->|BizException| E[Use e.code<br/>log=e.logStackTrace]
+    B -->|Validation Exception| F[INVALID_ARGUMENT<br/>Extract field errors]
+    B -->|Framework Exception| G[Map to ErrorCode]
+    B -->|Standard Exception| H[Map to ErrorCode]
+    B -->|Unknown| I[SERVER_ERROR]
+
+    C --> J[Create ApiResource]
+    D --> J
+    E --> J
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+
+    J --> K[Log if enabled]
+    K --> L[Return ResponseEntity]
+----
+
+== Error Response Format
+
+All error responses follow the `ApiResource` format:
+
+=== Example: Validation Error
+
+[source,json]
+----
+{
+  "status": {
+    "status": 400,
+    "code": "INVALID_ARGUMENT",
+    "message": "요청 인자가 올바르지 않습니다."
+  },
+  "meta": {
+    "size": 0
+  },
+  "data": {
+    "email": "must be a well-formed email address",
+    "age": "must be greater than or equal to 18"
+  }
+}
+----
+
+=== Example: Known Exception (Not Found)
+
+[source,json]
+----
+{
+  "status": {
+    "status": 406,
+    "code": "DATA_NOT_FOUND",
+    "message": "User not found: 123"
+  },
+  "meta": {
+    "size": 0
+  },
+  "data": "User not found: 123"
+}
+----
+
+=== Example: Server Error
+
+[source,json]
+----
+{
+  "status": {
+    "status": 500,
+    "code": "SERVER_ERROR",
+    "message": "일시적인 오류입니다. 잠시 후 다시 시도해주세요."
+  },
+  "meta": {
+    "size": 0
+  },
+  "data": "일시적인 오류입니다. 잠시 후 다시 시도해주세요."
+}
+----
+
+== Creating Custom Exceptions
+
+=== Pattern
+
+[source,kotlin]
+----
+class CustomException(
+    message: String,
+    code: ResponseCode = ErrorCode.APPROPRIATE_CODE,
+    cause: Throwable? = null,
+) : KnownException(code, message, cause)
+----
+
+=== Examples
+
+==== Not Found Exception
+
+[source,kotlin]
+----
+class UserNotFoundException(userId: Long) : KnownException(
+    ErrorCode.DATA_NOT_FOUND,
+    "User not found: $userId"
+)
+
+// Usage
+val user = userRepository.findById(id)
+    ?: throw UserNotFoundException(id)
+----
+
+==== Validation Exception
+
+[source,kotlin]
+----
+class InvalidEmailException(email: String) : KnownException(
+    ErrorCode.ILLEGAL_ARGUMENT,
+    "Invalid email format: $email"
+)
+
+// Usage
+if (!email.matches(EMAIL_REGEX)) {
+    throw InvalidEmailException(email)
+}
+----
+
+==== Business Rule Violation
+
+[source,kotlin]
+----
+class InsufficientBalanceException(
+    required: Money,
+    available: Money,
+) : BizRuntimeException(
+    ErrorCode.ILLEGAL_STATE,
+    "Insufficient balance: required ${required.format()}, available ${available.format()}",
+    logStackTrace = true
+)
+
+// Usage
+if (account.balance < amount) {
+    throw InsufficientBalanceException(amount, account.balance)
+}
+----
+
+==== External Service Error
+
+[source,kotlin]
+----
+class PaymentGatewayException(
+    message: String,
+    cause: Throwable,
+) : BizRuntimeException(
+    ErrorCode.CALL_RESPONSE_ERROR,
+    "Payment gateway error: $message",
+    cause = cause,
+    logStackTrace = true
+)
+
+// Usage
+try {
+    paymentGateway.charge(amount)
+} catch (e: Exception) {
+    throw PaymentGatewayException("Failed to charge", e)
+}
+----
+
+== Best Practices
+
+=== DO
+
+* **Use `KnownException`** for expected errors (validation, not found, user input)
+* **Use `BizRuntimeException`** for unrecoverable business errors with `logStackTrace = true`
+* **Use precondition utilities** (`knownRequired*`) for input validation
+* **Include context** in exception messages (IDs, values)
+* **Map domain errors** to appropriate `ErrorCode` values
+
+=== DON'T
+
+* **Don't use `KnownException`** for unexpected errors or bugs
+* **Don't log manually** - let `GlobalExceptionHandlerV2` handle it
+* **Don't expose internal details** (SQL, stack traces) to clients
+* **Don't create generic exceptions** - be specific
+* **Don't swallow exceptions** - let them propagate or wrap them
+
+=== Example: Complete Flow
+
+[source,kotlin]
+----
+@Service
+class OrderService(
+    private val orderRepository: OrderRepository,
+    private val paymentService: PaymentService,
+) {
+
+    fun createOrder(request: CreateOrderRequest): Order {
+        // 1. Validation with precondition utilities
+        knownRequired(request.items.isNotEmpty()) {
+            "Order must have at least one item"
+        }
+        val userId = knownRequiredNotNull(request.userId) {
+            "User ID is required"
+        }
+
+        // 2. Business logic with KnownException
+        val user = userRepository.findById(userId)
+            ?: throw UserNotFoundException(userId)
+
+        if (!user.isActive) {
+            throw KnownException(
+                ErrorCode.ILLEGAL_STATE,
+                "User account is not active"
+            )
+        }
+
+        // 3. External call with BizRuntimeException
+        val payment = try {
+            paymentService.charge(request.amount)
+        } catch (e: Exception) {
+            throw BizRuntimeException(
+                ErrorCode.CALL_RESPONSE_ERROR,
+                "Payment processing failed",
+                cause = e,
+                logStackTrace = true
+            )
+        }
+
+        // 4. Save and return
+        return orderRepository.save(
+            Order(
+                userId = userId,
+                items = request.items,
+                paymentId = payment.id
+            )
+        )
+    }
+}
+----
+
+== Summary
+
+The error handling strategy provides:
+
+* **Three-tier exception hierarchy** for different error types
+* **Type-safe error codes** with HTTP status mapping
+* **Consistent API responses** via `ApiResource`
+* **Appropriate logging** based on error severity
+* **Clean separation** between expected and unexpected errors
+* **Developer-friendly utilities** for common validation patterns
+
+By following this strategy, the codebase maintains consistent error handling across all modules and provides clear, actionable error messages to API consumers.

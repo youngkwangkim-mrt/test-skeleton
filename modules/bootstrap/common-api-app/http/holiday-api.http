@@ -1,0 +1,46 @@
+### Holiday API
+
+@baseUrl = http://localhost:8080
+
+### Get holidays by year
+GET {{baseUrl}}/api/holidays/2026
+
+### Get holidays by year and month
+GET {{baseUrl}}/api/holidays/2026/2
+
+### Get holidays by date
+GET {{baseUrl}}/api/holidays/2026/2/16
+
+### Create single holiday
+POST {{baseUrl}}/api/holidays
+Content-Type: application/json
+
+{
+  "holidayDate": "2027-01-01",
+  "name": "신정"
+}
+
+### Create bulk holidays
+POST {{baseUrl}}/api/holidays/bulk
+Content-Type: application/json
+
+{
+  "holidays": [
+    { "holidayDate": "2027-02-08", "name": "설날" },
+    { "holidayDate": "2027-02-09", "name": "설날" },
+    { "holidayDate": "2027-02-10", "name": "설날" },
+    { "holidayDate": "2027-03-01", "name": "삼일절" }
+  ]
+}
+
+### Update holiday (replace {id} with actual id)
+PUT {{baseUrl}}/api/holidays/1
+Content-Type: application/json
+
+{
+  "holidayDate": "2026-02-16",
+  "name": "설날 (수정)"
+}
+
+### Delete holiday (replace {id} with actual id)
+DELETE {{baseUrl}}/api/holidays/1

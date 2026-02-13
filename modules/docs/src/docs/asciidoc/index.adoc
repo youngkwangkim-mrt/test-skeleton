@@ -1,0 +1,59 @@
+= API Documentation
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:table-stripes: hover
+:sectanchors:
+
+
+== Overview
+
+본 문서는 API 연동을 위한 가이드입니다.
+
+[NOTE]
+--
+- 모든 API는 `ApiResource<T>` 형식으로 응답합니다.
+- 공통 응답 형식은 아래 <<api-req-res>> 섹션을 참조하세요.
+--
+
+
+[[api-req-res]]
+include::.templates/template-api-req-res.adoc[]
+
+
+== API Documentation
+
+=== Common API App
+
+공통 API 애플리케이션의 API 문서입니다.
+
+[cols="2,4,2", options="header"]
+|===
+| API | 설명 | 링크
+
+| Holiday API - 조회
+| 공휴일 조회 API (연도별, 월별, 일별)
+| link:common-api-app/holiday/holiday-query-v1.html[바로가기]
+
+| Holiday API - 등록/수정/삭제
+| 공휴일 등록, 수정, 삭제 API
+| link:common-api-app/holiday/holiday-command-v1.html[바로가기]
+
+|===
+
+
+=== Skeleton API App
+
+Skeleton API 애플리케이션의 API 문서입니다.
+
+[cols="2,4,2", options="header"]
+|===
+| API | 설명 | 링크
+
+| _문서 준비 중_
+| -
+| -
+
+|===

@@ -1,0 +1,840 @@
+= API Response Format
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+== Overview
+
+All REST APIs in the skeleton project use a standardized response format through the `ApiResource` wrapper. This ensures consistent API responses across all endpoints, with unified error handling, tracing, and metadata.
+
+[IMPORTANT]
+====
+**Mandatory Usage Rule**: All APIs except `GlobalController` and `HomeController` MUST respond with `ApiResource` format.
+
+Controller methods must return:
+[source,kotlin]
+----
+ResponseEntity<ApiResource<T>>
+----
+====
+
+== Standard Response Structure
+
+All API responses follow this JSON structure:
+
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "65d5a8f8c8c08dd0-0fcf42f6f7b5a34a-1",
+    "appTraceId": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+    "responseTs": 1738473600000,
+    "size": 1
+  },
+  "data": {
+    // Response payload
+  }
+}
+----
+
+=== Response Components
+
+[cols="1,3", options="header"]
+|===
+| Field
+| Description
+
+| `status`
+| HTTP status information (code, name, message)
+
+| `meta`
+| Response metadata (tracing IDs, timestamp, size, pagination info)
+
+| `data`
+| Actual response payload (can be any type: object, collection, map, etc.)
+|===
+
+== Status Object
+
+The `status` object provides standardized HTTP status information.
+
+[cols="1,1,3", options="header"]
+|===
+| Field
+| Type
+| Description
+
+| `status`
+| `Int`
+| HTTP status code (200, 400, 406, 500, etc.)
+
+| `code`
+| `String`
+| Response code name (SUCCESS, DATA_NOT_FOUND, SERVER_ERROR, etc.)
+
+| `message`
+| `String`
+| Human-readable status message
+|===
+
+The `Status` object is created from the `ResponseCode` interface:
+
+[source,kotlin]
+----
+data class Status(
+    val status: Int,
+    val code: String,
+    val message: String
+) {
+    companion object {
+        fun of(responseCode: ResponseCode): Status =
+            Status(responseCode.status, responseCode.name, responseCode.message)
+    }
+}
+----
+
+=== ResponseCode Interface
+
+All status codes are defined through the `ResponseCode` interface. Both success and error codes implement this interface.
+
+[source,kotlin]
+----
+interface ResponseCode {
+    val status: Int       // HTTP status code
+    val message: String   // Human-readable message
+    val name: String      // Response code name (enum name)
+
+    fun isSuccess(): Boolean = status in 200..299
+    fun isClientError(): Boolean = status in 400..499
+    fun isServerError(): Boolean = status in 500..599
+    fun isError(): Boolean = isClientError() || isServerError()
+}
+----
+
+=== SuccessCode
+
+[cols="1,1,2", options="header"]
+|===
+| Code
+| HTTP Status
+| Message
+
+| `SUCCESS`
+| 200
+| 성공
+
+| `CREATED`
+| 201
+| 생성 성공
+
+| `ACCEPTED`
+| 202
+| 접수 성공
+|===
+
+=== ErrorCode
+
+[IMPORTANT]
+====
+**Business errors always respond with HTTP 406 (Not Acceptable).**
+
+This project uses HTTP 406 as the standard status code for all business-level errors such as invalid arguments, illegal states, data not found, and unsupported operations. This distinguishes business errors from HTTP protocol errors (400, 404) and server errors (500).
+====
+
+[cols="1,1,2", options="header"]
+|===
+| Code
+| HTTP Status
+| Message
+
+3+h| Authentication & Authorization (HTTP standard codes)
+
+| `UNAUTHORIZED`
+| 401
+| 인증이 필요합니다.
+
+| `UNAUTHORIZED_IP`
+| 401
+| 허용되지 않은 IP 입니다.
+
+| `FORBIDDEN`
+| 403
+| 권한이 없습니다.
+
+| `NOT_FOUND`
+| 404
+| 요청한 자원을 찾을 수 없습니다.
+
+3+h| Request Validation (HTTP 400)
+
+| `INVALID_ARGUMENT`
+| 400
+| 요청 인자가 올바르지 않습니다.
+
+| `NOT_READABLE`
+| 400
+| 요청 메시지가 올바르지 않습니다.
+
+3+h| Business Errors (HTTP 406)
+
+| `ILLEGAL_ARGUMENT`
+| 406
+| 인자가 올바르지 않습니다.
+
+| `ILLEGAL_STATE`
+| 406
+| 상태가 올바르지 않습니다.
+
+| `DATA_NOT_FOUND`
+| 406
+| 요청한 데이터가 없습니다.
+
+| `UNSUPPORTED_OPERATION`
+| 406
+| 지원하지 않는 기능입니다.
+
+| `DB_ACCESS_ERROR`
+| 406
+| 데이터베이스 접근 오류입니다.
+
+| `CALL_RESPONSE_ERROR`
+| 406
+| 상태가 올바르지 않습니다. (외부 오류)
+
+3+h| Server Error (HTTP 500)
+
+| `SERVER_ERROR`
+| 500
+| 일시적인 오류입니다. 잠시 후 다시 시도해주세요.
+|===
+
+NOTE: The distinction between `INVALID_ARGUMENT` (400) and `ILLEGAL_ARGUMENT` (406) is that 400 is for request-level validation failures (malformed input, type mismatch), while 406 is for business-level validation failures (domain rule violations).
+
+=== Status Examples
+
+.Success Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "성공"
+  }
+}
+----
+
+.Business Error Response (HTTP 406)
+[source,json]
+----
+{
+  "status": {
+    "status": 406,
+    "code": "DATA_NOT_FOUND",
+    "message": "요청한 데이터가 없습니다."
+  }
+}
+----
+
+.Request Validation Error Response (HTTP 400)
+[source,json]
+----
+{
+  "status": {
+    "status": 400,
+    "code": "INVALID_ARGUMENT",
+    "message": "요청 인자가 올바르지 않습니다."
+  }
+}
+----
+
+.Server Error Response (HTTP 500)
+[source,json]
+----
+{
+  "status": {
+    "status": 500,
+    "code": "SERVER_ERROR",
+    "message": "일시적인 오류입니다. 잠시 후 다시 시도해주세요."
+  }
+}
+----
+
+== Meta Object
+
+The `meta` object contains response metadata, including distributed tracing information and optional pagination details.
+
+[cols="1,1,2,3", options="header"]
+|===
+| Field
+| Type
+| Nullable
+| Description
+
+| `x-b3-traceid`
+| `String`
+| No
+| B3 trace ID for distributed tracing (Zipkin/Sleuth compatible)
+
+| `appTraceId`
+| `String`
+| No
+| Application-level trace ID (UUID v7, time-sortable)
+
+| `responseTs`
+| `Long`
+| No
+| Response timestamp in Unix milliseconds
+
+| `size`
+| `Int`
+| Yes
+| Number of elements (for collections/maps only)
+
+| `pageInfo`
+| `PageInfo`
+| Yes
+| Standard pagination information (for offset-based pagination)
+
+| `offsetInfo`
+| `OffsetInfo`
+| Yes
+| Cursor pagination information (for no-offset pagination)
+|===
+
+NOTE: Nullable fields are excluded from JSON when `null` (using `@JsonInclude(JsonInclude.Include.NON_NULL)`).
+
+.Example - Meta with Collection Size
+[source,json]
+----
+{
+  "meta": {
+    "x-b3-traceid": "65d5a8f8c8c08dd0-0fcf42f6f7b5a34a-1",
+    "appTraceId": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+    "responseTs": 1738473600000,
+    "size": 10
+  }
+}
+----
+
+.Example - Meta with Pagination
+[source,json]
+----
+{
+  "meta": {
+    "x-b3-traceid": "65d5a8f8c8c08dd0-0fcf42f6f7b5a34a-1",
+    "appTraceId": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+    "responseTs": 1738473600000,
+    "pageInfo": {
+      "totalPages": 5,
+      "totalElements": 100,
+      "pageNumber": 0,
+      "pageElements": 20,
+      "isFirst": true,
+      "isLast": false,
+      "isEmpty": false
+    }
+  }
+}
+----
+
+== ApiResource Factory Methods
+
+`ApiResource` provides multiple factory methods for different response scenarios.
+
+[cols="2,2,4", options="header"]
+|===
+| Method
+| Return Type
+| Use Case
+
+| `success()`
+| `ResponseEntity<ApiResource<String>>`
+| Success response without data (returns "SUCCESS" string)
+
+| `success(data)`
+| `ResponseEntity<ApiResource<T>>`
+| Success response with single object
+
+| `ofCollection(list)`
+| `ResponseEntity<ApiResource<Collection<T>>>`
+| Collection response with size in meta
+
+| `ofMap(map)`
+| `ResponseEntity<ApiResource<Map<*, *>>>`
+| Map response with size in meta
+
+| `ofPage(page)`
+| `ResponseEntity<ApiResource<List<T>>>`
+| Standard offset-based pagination with PageInfo in meta
+
+| `ofNoOffsetPage(page, lastIndex)`
+| `ResponseEntity<ApiResource<List<T>>>`
+| Cursor-based pagination with OffsetInfo in meta
+
+| `of(code, data)`
+| `ResponseEntity<ApiResource<T>>`
+| Custom response with specific ResponseCode (for error responses)
+|===
+
+=== Automatic Type Detection
+
+The `of(data)` method automatically detects the data type and delegates to the appropriate factory method:
+
+[source,kotlin]
+----
+fun <T> of(code: ResponseCode, data: T): ResponseEntity<ApiResource<T>> =
+    when (data) {
+        is Collection<*> -> ofCollection(data, code)
+        is Map<*, *> -> ofMap(data, code)
+        is Page<*> -> ofPage(data, code)
+        else -> createResource(code, data).toResponseEntity()
+    }
+----
+
+== Pagination Support
+
+=== Standard Offset-Based Pagination
+
+Use `ofPage()` for traditional offset-based pagination with Spring Data `Page`.
+
+.PageInfo Structure
+[cols="1,1,3", options="header"]
+|===
+| Field
+| Type
+| Description
+
+| `totalPages`
+| `Int`
+| Total number of pages
+
+| `totalElements`
+| `Long`
+| Total number of elements across all pages
+
+| `pageNumber`
+| `Int`
+| Current page number (zero-indexed)
+
+| `pageElements`
+| `Int`
+| Number of elements in current page
+
+| `isFirst`
+| `Boolean`
+| Whether this is the first page
+
+| `isLast`
+| `Boolean`
+| Whether this is the last page
+
+| `isEmpty`
+| `Boolean`
+| Whether the page is empty
+|===
+
+.Example - Paginated Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "65d5a8f8c8c08dd0-0fcf42f6f7b5a34a-1",
+    "appTraceId": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+    "responseTs": 1738473600000,
+    "pageInfo": {
+      "totalPages": 5,
+      "totalElements": 100,
+      "pageNumber": 0,
+      "pageElements": 20,
+      "isFirst": true,
+      "isLast": false,
+      "isEmpty": false
+    }
+  },
+  "data": [
+    // Array of 20 items
+  ]
+}
+----
+
+=== No-Offset (Cursor-Based) Pagination
+
+Use `ofNoOffsetPage()` for cursor-based pagination, suitable for large datasets or real-time feeds.
+
+.OffsetInfo Structure
+[cols="1,1,3", options="header"]
+|===
+| Field
+| Type
+| Description
+
+| `lastIndex`
+| `String`
+| Cursor value for next page (typically last item's ID or timestamp)
+
+| `totalPages`
+| `Int`
+| Total number of pages (estimated)
+
+| `totalElements`
+| `Long`
+| Total number of elements (estimated)
+
+| `pageNumber`
+| `Int`
+| Current page number (zero-indexed)
+
+| `pageElements`
+| `Int`
+| Number of elements in current page
+
+| `isLast`
+| `Boolean`
+| Whether this is the last page
+
+| `isEmpty`
+| `Boolean`
+| Whether the page is empty
+|===
+
+.Example - No-Offset Paginated Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "65d5a8f8c8c08dd0-0fcf42f6f7b5a34a-1",
+    "appTraceId": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+    "responseTs": 1738473600000,
+    "offsetInfo": {
+      "lastIndex": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+      "totalPages": 0,
+      "totalElements": 0,
+      "pageNumber": 0,
+      "pageElements": 20,
+      "isLast": false,
+      "isEmpty": false
+    }
+  },
+  "data": [
+    // Array of 20 items
+  ]
+}
+----
+
+== Controller Implementation Examples
+
+All examples assume the controller is annotated with `@RestController` and `@RequestMapping`.
+
+=== Single Object Response
+
+[source,kotlin]
+----
+@GetMapping("/{id}")
+fun findById(@PathVariable id: Long): ResponseEntity<ApiResource<UserDto>> =
+    ApiResource.success(userService.findById(id))
+----
+
+.Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "...",
+    "responseTs": 1738473600000
+  },
+  "data": {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com"
+  }
+}
+----
+
+=== Collection Response
+
+[source,kotlin]
+----
+@GetMapping
+fun findAll(): ResponseEntity<ApiResource<Collection<UserDto>>> =
+    ApiResource.ofCollection(userService.findAll())
+----
+
+.Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "...",
+    "responseTs": 1738473600000,
+    "size": 10
+  },
+  "data": [
+    { "id": 1, "name": "John" },
+    { "id": 2, "name": "Jane" }
+  ]
+}
+----
+
+=== Paginated Response
+
+[source,kotlin]
+----
+@GetMapping
+fun findAll(pageable: Pageable): ResponseEntity<ApiResource<List<UserDto>>> =
+    ApiResource.ofPage(userService.findAll(pageable))
+----
+
+.Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "...",
+    "responseTs": 1738473600000,
+    "pageInfo": {
+      "totalPages": 5,
+      "totalElements": 100,
+      "pageNumber": 0,
+      "pageElements": 20,
+      "isFirst": true,
+      "isLast": false,
+      "isEmpty": false
+    }
+  },
+  "data": [
+    { "id": 1, "name": "John" },
+    { "id": 2, "name": "Jane" }
+  ]
+}
+----
+
+=== No-Offset Paginated Response
+
+[source,kotlin]
+----
+@GetMapping("/feed")
+fun getFeed(
+    @RequestParam(required = false) lastIndex: String?,
+    pageable: Pageable
+): ResponseEntity<ApiResource<List<PostDto>>> {
+    val page = postService.findFeed(lastIndex, pageable)
+    val newLastIndex = page.content.lastOrNull()?.id ?: ""
+    return ApiResource.ofNoOffsetPage(page, newLastIndex)
+}
+----
+
+=== Map Response
+
+[source,kotlin]
+----
+@GetMapping("/stats")
+fun getStatistics(): ResponseEntity<ApiResource<Map<String, Any>>> =
+    ApiResource.ofMap(statisticsService.getStats())
+----
+
+.Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "...",
+    "responseTs": 1738473600000,
+    "size": 3
+  },
+  "data": {
+    "totalUsers": 1000,
+    "activeUsers": 850,
+    "newToday": 15
+  }
+}
+----
+
+=== Delete/Void Response
+
+[source,kotlin]
+----
+@DeleteMapping("/{id}")
+fun deleteUser(@PathVariable id: Long): ResponseEntity<ApiResource<String>> {
+    userService.delete(id)
+    return ApiResource.success()
+}
+----
+
+.Response
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "...",
+    "responseTs": 1738473600000
+  },
+  "data": "SUCCESS"
+}
+----
+
+=== Create Response
+
+[source,kotlin]
+----
+@PostMapping
+fun createUser(@RequestBody request: CreateUserRequest): ResponseEntity<ApiResource<UserDto>> =
+    ApiResource.success(userService.create(request))
+----
+
+NOTE: POST responses typically return HTTP 200 (not 201 CREATED) when using `ApiResource.success()`. For HTTP 201, use `ResponseEntity.created()` instead.
+
+=== Error Response (Automatic)
+
+Error responses are automatically handled by `GlobalExceptionHandlerV2`. Controllers don't need to handle exceptions explicitly.
+
+[source,kotlin]
+----
+@GetMapping("/{id}")
+fun findById(@PathVariable id: Long): ResponseEntity<ApiResource<UserDto>> {
+    // If user not found, service throws KnownException with ErrorCode.DATA_NOT_FOUND
+    // GlobalExceptionHandlerV2 automatically converts it to ApiResource format (HTTP 406)
+    return ApiResource.success(userService.findById(id))
+}
+----
+
+.Business Error Response Example (HTTP 406)
+[source,json]
+----
+{
+  "status": {
+    "status": 406,
+    "code": "DATA_NOT_FOUND",
+    "message": "요청한 데이터가 없습니다."
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "...",
+    "responseTs": 1738473600000
+  },
+  "data": "User not found: 123"
+}
+----
+
+NOTE: Business errors (`DATA_NOT_FOUND`, `ILLEGAL_ARGUMENT`, `ILLEGAL_STATE`, etc.) respond with HTTP 406, not 404. See <<ErrorCode>> for the full list of error codes and their HTTP status mappings.
+
+For detailed exception handling information, see xref:03-error-handling.adoc[Error Handling].
+
+== Important Rules
+
+[IMPORTANT]
+====
+1. **Mandatory Usage**: ALL APIs except `GlobalController` and `HomeController` must use `ApiResource` format
+2. **Return Type**: Controller methods must return `ResponseEntity<ApiResource<T>>`
+3. **No Manual Error Handling**: Don't catch exceptions to create error responses - let `GlobalExceptionHandlerV2` handle them
+4. **Consistent Tracing**: Trace IDs are automatically populated from MDC context
+5. **Type Safety**: Use appropriate factory methods for different data types
+====
+
+=== Anti-Patterns (Don't Do This)
+
+[source,kotlin]
+----
+// BAD: Not using ApiResource
+@GetMapping("/{id}")
+fun findById(@PathVariable id: Long): UserDto =
+    userService.findById(id)
+
+// BAD: Using only ResponseEntity without ApiResource
+@GetMapping("/{id}")
+fun findById(@PathVariable id: Long): ResponseEntity<UserDto> =
+    ResponseEntity.ok(userService.findById(id))
+
+// BAD: Manual exception handling (unnecessary)
+@GetMapping("/{id}")
+fun findById(@PathVariable id: Long): ResponseEntity<ApiResource<UserDto>> {
+    return try {
+        ApiResource.success(userService.findById(id))
+    } catch (e: UserNotFoundException) {
+        ApiResource.of(ErrorCode.DATA_NOT_FOUND, e.message)
+    }
+}
+
+// BAD: Not using factory methods for collections
+@GetMapping
+fun findAll(): ResponseEntity<ApiResource<List<UserDto>>> =
+    ApiResource.success(userService.findAll()) // Should use ofCollection()
+----
+
+== Related Documentation
+
+* xref:06-exception-handling.adoc[Exception Handling] - Error handling and custom exceptions
+* xref:05-distributed-tracing.adoc[Distributed Tracing] - Trace ID generation and propagation
+* link:../../modules/common-web/README.adoc[Common-Web Module] - Response format implementation details
+
+== Implementation Classes
+
+[cols="2,4", options="header"]
+|===
+| Class
+| Location
+
+| `ApiResource`
+| `modules/common-web/src/main/kotlin/com/myrealtrip/commonweb/response/resource/ApiResource.kt`
+
+| `Status`
+| `modules/common-web/src/main/kotlin/com/myrealtrip/commonweb/response/resource/Status.kt`
+
+| `Meta`
+| `modules/common-web/src/main/kotlin/com/myrealtrip/commonweb/response/resource/Meta.kt`
+
+| `PageResponse`
+| `modules/common-web/src/main/kotlin/com/myrealtrip/commonweb/response/PageResponse.kt`
+
+| `NoOffsetPageResponse`
+| `modules/common-web/src/main/kotlin/com/myrealtrip/commonweb/response/NoOffsetPageResponse.kt`
+|===

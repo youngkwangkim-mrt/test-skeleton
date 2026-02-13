@@ -1,0 +1,610 @@
+= Infrastructure Module
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+
+== 개요
+
+데이터베이스, 캐시, 외부 서비스와 연동합니다.
+
+=== 주요 기능
+
+|===
+|기능 |설명
+
+|HTTP Client
+|RestClient + Feign 스타일 로깅
+
+|Cache
+|Caffeine (L1) + Redis (L2) 2단계 캐시
+
+|Distributed Lock
+|Redisson 기반 분산 락
+
+|Async
+|Virtual Thread + MDC 컨텍스트 전파
+
+|Persistence
+|JPA & QueryDSL
+
+|Export
+|Excel/CSV 파일 내보내기 (어노테이션 기반)
+|===
+
+== HTTP Client
+
+=== HttpLoggingInterceptor
+
+Feign 스타일 HTTP 요청/응답 로깅입니다.
+
+[source,kotlin]
+----
+HttpLoggingInterceptor("TodoClient", Level.SIMPLE)
+HttpLoggingInterceptor("TodoClient", Level.FULL)
+----
+
+==== 로그 레벨
+
+|===
+|레벨 |출력 내용
+
+|`SIMPLE`
+|요청/응답 라인 + END 요약
+
+|`FULL`
+|헤더 + 바디 포함
+|===
+
+==== 출력 예시 (SIMPLE)
+
+[source]
+----
+[TodoClient#findById] ---> GET https://api.example.com/todos/1
+[TodoClient#findById] ---> END (0-byte body)
+[TodoClient#findById] <--- 200 OK (45ms)
+[TodoClient#findById] <--- END (83-byte body)
+----
+
+=== HttpExchangeMethodAspect
+
+`@HttpExchange` 메서드명을 캡처하는 AOP입니다.
+
+* `HttpExchangeMethodContext`: ThreadLocal 기반 메서드명 전달
+* Interceptor에서 실제 호출된 메서드명 로깅 가능
+
+=== RestClientConfig
+
+기본 RestClient Bean 설정입니다.
+
+[source,kotlin]
+----
+@Bean
+@Primary
+fun defaultRestClient(restClientBuilder: RestClient.Builder): RestClient
+----
+
+== 캐시
+
+=== CaffeineCacheManager (Primary)
+
+로컬 인메모리 캐시입니다. 기본 캐시 매니저입니다.
+
+|===
+|설정 |값 |설명
+
+|`maximumSize`
+|200
+|최대 캐시 항목 수
+
+|`expireAfterWrite`
+|30분
+|쓰기 후 만료 시간
+
+|`expireAfterAccess`
+|10분
+|마지막 접근 후 만료 시간
+|===
+
+=== RedisCacheManager
+
+Redisson 기반 분산 캐시입니다. 인스턴스 간 캐시를 공유합니다.
+
+|===
+|캐시 이름 |TTL |유휴 시간 |용도
+
+|`SHORT_LIVED`
+|10분
+|5분
+|검색, 실시간 데이터
+
+|`DEFAULT`
+|30분
+|10분
+|일반 조회
+
+|`MID_LIVED`
+|1시간
+|20분
+|자주 변경되지 않는 데이터
+
+|`LONG_LIVED`
+|24시간
+|4시간
+|코드성 데이터, 설정
+|===
+
+==== 사용 예시
+
+[source,kotlin]
+----
+import com.myrealtrip.infrastructure.cache.CacheConfig.Companion.DEFAULT
+
+// 캐시 조회/저장
+@Cacheable(cacheManager = "redisCacheManager", cacheNames = [DEFAULT], key = "#id")
+fun findById(id: Long): User
+
+// 캐시 삭제
+@CacheEvict(cacheManager = "redisCacheManager", cacheNames = [DEFAULT], key = "#id")
+fun update(id: Long): User
+----
+
+== Redis 함수
+
+=== redisGet
+
+캐시 조회 후 없으면 람다를 실행하여 저장합니다.
+
+[source,kotlin]
+----
+val data = redisGet("cache-key", ttl = Duration.ofMinutes(5)) {
+    repository.findData()
+}
+----
+
+|===
+|옵션 |설명
+
+|`bypass`
+|캐시 무시하고 직접 조회
+
+|`force`
+|캐시 강제 갱신
+|===
+
+=== redisSetAsync
+
+캐시를 비동기로 저장합니다.
+
+[source,kotlin]
+----
+redisSetAsync("cache-key") { computeData() }
+----
+
+=== redisDelete / redisUnlinkAsync
+
+캐시를 삭제합니다.
+
+[source,kotlin]
+----
+redisDelete("cache-key")           // 동기 삭제
+redisUnlinkAsync("cache-key")      // 비동기 삭제
+redisUnlinkByPatternAsync("key:*") // 패턴으로 삭제
+----
+
+== 분산 락
+
+=== redisLock
+
+Redisson 기반 분산 락입니다.
+
+[source,kotlin]
+----
+redisLock("lock-key", waitTime = 3, leaseTime = 5) {
+    // 임계 구역 (Critical Section)
+}
+----
+
+|===
+|파라미터 |기본값 |설명
+
+|`waitTime`
+|3초
+|락 획득 대기 시간
+
+|`leaseTime`
+|5초
+|락 유지 시간
+|===
+
+== 비동기
+
+=== AsyncConfig
+
+Virtual Thread 기반 비동기 실행 설정입니다.
+
+|===
+|설정 |값
+
+|Thread prefix
+|`async-vt-`
+
+|TaskDecorator
+|`ContextPropagatingTaskDecorator` (MDC 전파)
+|===
+
+=== MdcTaskDecorator
+
+MDC 컨텍스트를 비동기 스레드로 전파합니다.
+
+== Export
+
+어노테이션 기반 Excel/CSV 파일 내보내기입니다.
+
+=== 기본 사용법
+
+[source,kotlin]
+----
+// 1. DTO에 어노테이션 적용
+@ExportSheet(name = "사용자 목록")
+data class UserExportDto(
+    @ExportColumn(header = "이름", order = 1)
+    val name: String,
+    @ExportColumn(header = "이메일", order = 2)
+    val email: String,
+    @ExportColumn(header = "가입일", order = 3, format = "yyyy-MM-dd")
+    val createdAt: LocalDate,
+)
+
+// 2. Excel 내보내기
+val exporter = ExcelExporter()
+exporter.export(users, UserExportDto::class, outputStream)
+
+// 3. CSV 내보내기
+val csvExporter = CsvExporter()
+csvExporter.export(users, UserExportDto::class, outputStream)
+----
+
+=== @ExportSheet
+
+시트 레벨 설정입니다.
+
+|===
+|속성 |기본값 |설명
+
+|`name`
+|`"Sheet1"`
+|시트명
+
+|`freezeHeader`
+|`true`
+|헤더 행 고정 여부
+
+|`includeIndex`
+|`true`
+|인덱스 컬럼 포함 (No.)
+
+|`indexHeader`
+|`"No."`
+|인덱스 헤더명
+
+|`indexWidth`
+|`6`
+|인덱스 컬럼 너비
+
+|`overflowStrategy`
+|`MULTI_SHEET`
+|시트 최대 행 초과 시 처리 전략
+|===
+
+=== @ExportColumn
+
+컬럼 레벨 설정입니다.
+
+|===
+|속성 |기본값 |설명
+
+|`header`
+|필수
+|헤더명
+
+|`order`
+|`0`
+|컬럼 순서
+
+|`width`
+|`-1`
+|컬럼 너비 (음수: 자동)
+
+|`format`
+|`""`
+|셀 포맷 (숫자/날짜)
+
+|`headerStyle`
+|`NONE`
+|헤더 스타일
+
+|`bodyStyle`
+|`NONE`
+|바디 스타일
+|===
+
+=== 스타일 프리셋
+
+`ExportStylePreset`으로 미리 정의된 스타일을 사용합니다.
+
+==== 헤더 프리셋
+
+|===
+|프리셋 |설명
+
+|`HEADER_DEFAULT`
+|굵게, 회색 배경, 가운데 정렬
+
+|`HEADER_BLUE`
+|굵게, 파란 배경, 가운데 정렬, 테두리
+
+|`HEADER_DARK_BLUE`
+|굵게, 진한 파란 배경, 흰 글씨
+
+|`HEADER_GREEN`
+|굵게, 녹색 배경, 가운데 정렬, 테두리
+
+|`HEADER_ORANGE`
+|굵게, 주황 배경, 가운데 정렬, 테두리
+
+|`HEADER_YELLOW`
+|굵게, 노란 배경, 가운데 정렬, 테두리
+|===
+
+==== 바디 프리셋
+
+|===
+|프리셋 |설명
+
+|`BODY_DEFAULT`
+|왼쪽 정렬
+
+|`BODY_CENTER`
+|가운데 정렬
+
+|`BODY_RIGHT`
+|오른쪽 정렬 (숫자용)
+
+|`BODY_HIGHLIGHT`
+|굵게, 노란 배경
+
+|`BODY_WARNING`
+|굵게, 주황 배경, 빨간 글씨
+
+|`BODY_SUCCESS`
+|녹색 배경
+
+|`BODY_CURRENCY`
+|굵게, 오른쪽 정렬
+
+|`BODY_LINK`
+|파란 글씨
+|===
+
+==== 프리셋 사용 예시
+
+[source,kotlin]
+----
+@ExportSheet(name = "주문 내역")
+data class OrderExportDto(
+    @ExportColumn(
+        header = "주문번호",
+        order = 1,
+        headerStyle = ExportCellStyle(preset = ExportStylePreset.HEADER_BLUE),
+    )
+    val orderNo: String,
+
+    @ExportColumn(
+        header = "금액",
+        order = 2,
+        format = "#,##0",
+        headerStyle = ExportCellStyle(preset = ExportStylePreset.HEADER_BLUE),
+        bodyStyle = ExportCellStyle(preset = ExportStylePreset.BODY_CURRENCY),
+    )
+    val amount: Long,
+
+    @ExportColumn(
+        header = "상태",
+        order = 3,
+        headerStyle = ExportCellStyle(preset = ExportStylePreset.HEADER_BLUE),
+        bodyStyle = ExportCellStyle(preset = ExportStylePreset.BODY_CENTER),
+    )
+    val status: String,
+)
+----
+
+=== 커스텀 스타일
+
+`@ExportCellStyle`로 세부 스타일을 지정합니다.
+
+[source,kotlin]
+----
+@ExportColumn(
+    header = "특별 할인",
+    headerStyle = ExportCellStyle(
+        bold = true,
+        bgColor = ExportColor.LIGHT_YELLOW,
+        alignment = ExportAlignment.CENTER,
+        border = ExportBorder.THIN,
+    ),
+    bodyStyle = ExportCellStyle(
+        fontColor = ExportColor.DARK_RED,
+        alignment = ExportAlignment.RIGHT,
+    ),
+)
+val discount: Long
+----
+
+|===
+|속성 |설명
+
+|`preset`
+|스타일 프리셋 (기본: NONE)
+
+|`bold`
+|굵게
+
+|`italic`
+|기울임
+
+|`fontSize`
+|글자 크기 (-1: 기본)
+
+|`font`
+|폰트 (ExportFont)
+
+|`fontColor`
+|글자 색상
+
+|`bgColor`
+|배경 색상
+
+|`alignment`
+|정렬 (LEFT, CENTER, RIGHT)
+
+|`border`
+|테두리 (NONE, THIN, MEDIUM, THICK)
+
+|`borderColor`
+|테두리 색상
+|===
+
+=== 폰트 (ExportFont)
+
+사용 가능한 폰트입니다.
+
+|===
+|값 |폰트명
+
+|`DEFAULT`
+|시스템 기본
+
+|`ARIAL`
+|Arial
+
+|`CALIBRI`
+|Calibri
+
+|`TIMES_NEW_ROMAN`
+|Times New Roman
+
+|`MALGUN_GOTHIC`
+|맑은 고딕
+
+|`NANUM_GOTHIC`
+|나눔고딕
+
+|`NANUM_MYEONGJO`
+|나눔명조
+|===
+
+=== 대용량 처리
+
+==== 청크 내보내기
+
+메모리 효율적인 대용량 처리입니다.
+
+[source,kotlin]
+----
+exporter.exportWithChunks(UserExportDto::class, outputStream) { consumer ->
+    // 페이지 단위로 데이터 조회 및 내보내기
+    var page = 0
+    do {
+        val users = userRepository.findAll(PageRequest.of(page++, 1000))
+        consumer(users.content.map { it.toExportDto() })
+    } while (users.hasNext())
+}
+----
+
+==== OverflowStrategy
+
+시트당 최대 행(1,048,575) 초과 시 처리 전략입니다.
+
+|===
+|전략 |설명
+
+|`MULTI_SHEET`
+|자동으로 새 시트 생성 (기본값)
+
+|`EXCEPTION`
+|예외 발생
+|===
+
+[source,kotlin]
+----
+@ExportSheet(
+    name = "대용량 데이터",
+    overflowStrategy = OverflowStrategy.MULTI_SHEET,  // 기본값
+)
+data class LargeDataDto(...)
+----
+
+멀티시트 생성 시 시트명:
+
+* 첫 번째: `데이터`
+* 두 번째: `데이터 (2)`
+* 세 번째: `데이터 (3)`
+* ...
+
+=== CSV 옵션
+
+[source,kotlin]
+----
+val csvExporter = CsvExporter(
+    delimiter = ',',           // 구분자 (기본: ,)
+    includeHeader = true,      // 헤더 포함 (기본: true)
+    includeBom = true,         // BOM 포함 (기본: true, Excel 한글 호환)
+    charset = Charsets.UTF_8,  // 문자셋 (기본: UTF-8)
+)
+----
+
+== 설정 방법
+
+프로파일에 `infrastructure`를 포함하세요.
+
+[source,yaml]
+----
+spring:
+  profiles:
+    include: infrastructure
+----
+
+== 주의 사항
+
+[IMPORTANT]
+====
+**Redis Key Prefix 자동 적용**
+
+모든 캐시/락 키에 prefix가 자동 추가됩니다.
+
+* 형식: `glory:app:` + key (소문자 변환)
+* 변경: `RedisConstants.REDIS_PREFIX`
+====
+
+[IMPORTANT]
+====
+**빈 컬렉션 캐시 방지**
+
+캐시 오염 방지를 위해 빈 컬렉션은 캐시하지 않습니다.
+====
+
+[IMPORTANT]
+====
+**Docker Compose 자동 시작**
+
+local/dev 환경에서 Redis가 자동 실행됩니다.
+Bootstrap 모듈에 다음 의존성을 추가하세요.
+
+[source,kotlin]
+----
+developmentOnly(rootProject.libs.spring.boot.docker.compose)
+----
+====

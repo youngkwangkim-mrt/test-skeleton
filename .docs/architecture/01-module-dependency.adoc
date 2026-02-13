@@ -1,0 +1,663 @@
+= Module Dependencies
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+This document describes the module structure, dependency relationships, and build configuration architecture of the hexagonal-skeleton project.
+
+== Module Inventory
+
+The project consists of 7 modules (6 active + 1 planned) following layered architecture principles with dependency inversion:
+
+[cols="3,2,3,5", options="header"]
+|===
+| Module | Type | Package Root | Purpose
+
+| `common`
+| library
+| `com.myrealtrip.common`
+| Shared utilities, value objects (Email, PhoneNumber, Money, Rate), exceptions, date/time utilities, cipher, extensions
+
+| `common-web`
+| library
+| `com.myrealtrip.commonweb`
+| Web infrastructure: filters (AppTraceFilter, ContentCachingFilter), interceptors (LogInterceptor), exception handlers (GlobalExceptionHandlerV2), ApiResource response format, AOP aspects
+
+| `infrastructure`
+| library
+| `com.myrealtrip.infrastructure`
+| Technical implementations: cache (Caffeine, Redisson), Redis aspects, HTTP client (RestClient with logging), Excel export (Apache POI), Slack SDK, JPA repositories
+
+| `application/todo-application`
+| library
+| `com.myrealtrip.todoapplication`
+| Todo reference implementation: TodoClient (@HttpExchange), TodoClientConfig, TodoService, Todo domain model
+
+| `bootstrap/skeleton-api-app`
+| app
+| `com.myrealtrip.skeletonapiapp`
+| REST API server: Controllers, SkeletonApiApplication, Spring Boot executable (bootJar enabled)
+
+| `bootstrap/skeleton-worker-app`
+| app
+| `com.myrealtrip.skeletonworkerapp`
+| Worker/scheduled jobs server: SkeletonWorkerApplication, Spring Boot executable (bootJar enabled)
+
+| `domain` (PLANNED)
+| library
+| `com.myrealtrip.domain`
+| Business rules and domain models (currently commented out in settings.gradle.kts)
+|===
+
+=== Module Type Classification
+
+* **Library modules**: Standard jar output, consumed by other modules. No Spring Boot plugin. Examples: common, common-web, infrastructure, application/*
+* **App modules**: Spring Boot applications with `-app` suffix. BootJar enabled, jar disabled. Examples: skeleton-api-app, skeleton-worker-app
+
+== Dependency Graph
+
+The following diagram shows all actual dependencies between modules based on build.gradle.kts files:
+
+[mermaid]
+----
+graph TB
+    subgraph Bootstrap["Bootstrap Layer (-app modules)"]
+        API[skeleton-api-app]
+        Worker[skeleton-worker-app]
+    end
+
+    subgraph Application["Application Layer"]
+        TodoApp[todo-application]
+    end
+
+    subgraph Infrastructure["Infrastructure Layer"]
+        Infra[infrastructure]
+    end
+
+    subgraph Web["Web Layer"]
+        CommonWeb[common-web]
+    end
+
+    subgraph Foundation["Foundation Layer"]
+        Common[common]
+    end
+
+    subgraph Planned["Planned (Future)"]
+        Domain[domain]
+    end
+
+    %% Explicit dependencies from build files
+    API -->|implementation| TodoApp
+    API -->|auto-added| CommonWeb
+    API -->|auto-added| Infra
+
+    Worker -->|auto-added| CommonWeb
+    Worker -->|auto-added| Infra
+
+    TodoApp -->|api| Infra
+    TodoApp -->|api| CommonWeb
+
+    CommonWeb -->|auto-added| Common
+    Infra -->|auto-added| Common
+    TodoApp -->|auto-added| Common
+
+    %% Planned future dependency (dashed)
+    Domain -.->|planned| Common
+    TodoApp -.->|planned| Domain
+
+    style Common fill:#e1f5fe
+    style CommonWeb fill:#f3e5f5
+    style Infra fill:#fff3e0
+    style TodoApp fill:#e8f5e9
+    style API fill:#ffebee
+    style Worker fill:#ffebee
+    style Domain fill:#fafafa,stroke-dasharray: 5 5
+----
+
+=== Dependency Legend
+
+* Solid lines: Active dependencies declared in build.gradle.kts
+* **auto-added**: Dependencies injected by root build.gradle.kts (lines 93-108, 128-131)
+* Dashed lines: Planned future dependencies (domain module)
+
+== Dependency Rules
+
+The following rules govern module dependencies, enforced through Gradle configuration:
+
+=== Rule 1: common Depends on Nothing
+
+**Status**: ✓ Enforced
+
+The `common` module is the foundation layer with zero internal project dependencies.
+
+.Evidence: modules/common/build.gradle.kts
+[source,kotlin]
+----
+// Common module - pure utilities and shared code
+
+dependencies {
+    implementation(rootProject.libs.libphonenumber)
+}
+----
+
+Only external dependency: `libphonenumber` for PhoneNumber value object validation.
+
+=== Rule 2: common-web Depends on common + Spring Web
+
+**Status**: ✓ Auto-injected + Explicit
+
+.Evidence: modules/common-web/build.gradle.kts
+[source,kotlin]
+----
+dependencies {
+    api(rootProject.libs.bundles.spring.web)    // Spring MVC, Validation, AspectJ
+    api(rootProject.libs.bundles.metrics)       // Actuator, Micrometer tracing
+    api(rootProject.libs.bundles.openapi)       // Springdoc OpenAPI
+}
+----
+
+Plus auto-injected `common` dependency (root build.gradle.kts lines 93-108).
+
+Spring-web bundle includes:
+[source,kotlin]
+----
+spring-web = [
+    "spring-boot-starter-webmvc",
+    "spring-boot-starter-validation",
+    "spring-boot-starter-aspectj",
+    "spring-boot-configuration-processor",
+    "spring-boot-annotation-processor",
+    "spring-data-commons"
+]
+----
+
+=== Rule 3: infrastructure Depends on common
+
+**Status**: ✓ Auto-injected + Own dependencies
+
+.Evidence: modules/infrastructure/build.gradle.kts
+[source,kotlin]
+----
+dependencies {
+    // Spring Data & QueryDSL
+    implementation(rootProject.libs.bundles.spring.data)
+
+    // Cache (Caffeine, Redisson, LZ4)
+    implementation(rootProject.libs.bundles.cache)
+
+    // Apache POI (Excel Export)
+    implementation(rootProject.libs.poi.ooxml)
+
+    // Slack SDK
+    implementation(rootProject.libs.slack.api.client)
+
+    // RestClient (HTTP Client with tracing support)
+    implementation(rootProject.libs.spring.boot.starter.restclient)
+    implementation(rootProject.libs.spring.boot.starter.aspectj)
+    implementation(rootProject.libs.bundles.metrics)
+
+    // Database
+    runtimeOnly(rootProject.libs.h2)
+}
+----
+
+The `common` dependency is auto-injected (root build.gradle.kts lines 93-108).
+
+=== Rule 4: application/* Depends on infrastructure
+
+**Status**: ✓ Explicit API dependency
+
+Application modules depend on infrastructure layer for technical capabilities.
+
+.Evidence: modules/application/todo-application/build.gradle.kts
+[source,kotlin]
+----
+dependencies {
+    api(project(":modules:infrastructure"))
+    api(rootProject.libs.bundles.spring.web)
+}
+----
+
+Using `api` instead of `implementation` to expose infrastructure types in application module's public API.
+
+=== Rule 5: bootstrap/*-app Gets common-web + infrastructure Automatically
+
+**Status**: ✓ Auto-injected
+
+All modules with `-app` suffix automatically receive `common-web` and `infrastructure` dependencies.
+
+.Evidence: root build.gradle.kts lines 114-132
+[source,kotlin]
+----
+// =============================================================================
+// Bootstrap App Modules (*-app)
+// =============================================================================
+configure(subprojects.filter { it.name.endsWith("-app") }) {
+    apply(plugin = "org.springframework.boot")
+    apply(plugin = "org.jetbrains.kotlin.kapt")
+
+    tasks.named<BootJar>("bootJar") {
+        enabled = true
+        archiveClassifier.set("boot")
+    }
+
+    tasks.named<Jar>("jar") {
+        enabled = false
+    }
+
+    dependencies {
+        val implementation by configurations
+        implementation(project(":modules:common-web"))
+        implementation(project(":modules:infrastructure"))
+    }
+}
+----
+
+**Effect**: Any module named `*-app` automatically becomes a Spring Boot application with web infrastructure.
+
+.Evidence: skeleton-api-app additionally depends on todo-application
+[source,kotlin]
+----
+// modules/bootstrap/skeleton-api-app/build.gradle.kts
+dependencies {
+    implementation(project(":modules:application:todo-application"))
+    developmentOnly(rootProject.libs.spring.boot.docker.compose)
+}
+----
+
+.Evidence: skeleton-worker-app has no additional dependencies
+[source,kotlin]
+----
+// modules/bootstrap/skeleton-worker-app/build.gradle.kts
+dependencies {
+    developmentOnly(rootProject.libs.spring.boot.docker.compose)
+}
+----
+
+=== Rule 6: domain Module (Planned) - Between application and common
+
+**Status**: ⏳ Planned (commented out)
+
+The domain module will sit between application and common layers.
+
+.Evidence: settings.gradle.kts
+[source,kotlin]
+----
+include(
+    // Foundation
+    "modules:common",
+    "modules:common-web",
+
+    // Infrastructure
+    "modules:infrastructure",
+
+    // Core Business
+//    "modules:domain",  // <-- Currently commented out
+    "modules:application:todo-application",
+
+    // Runtime
+    "modules:bootstrap:skeleton-api-app",
+    "modules:bootstrap:skeleton-worker-app",
+)
+----
+
+**Planned structure**:
+[source]
+----
+application/* → domain → common
+----
+
+== Gradle Configuration Architecture
+
+=== Version Catalog Strategy (libs.versions.toml)
+
+All library versions and dependencies are centralized in `gradle/libs.versions.toml`:
+
+[cols="2,8", options="header"]
+|===
+| Section | Purpose
+
+| `[versions]`
+| Version variables: Spring Boot 4.0.2, Spring Cloud 2025.1.1, Kotlin 2.3.0, etc.
+
+| `[libraries]`
+| Library coordinates with version references
+
+| `[bundles]`
+| Logical groupings of libraries for easier consumption
+
+| `[plugins]`
+| Gradle plugin definitions
+|===
+
+==== Bundle Strategy
+
+Common dependency bundles used across modules:
+
+[cols="2,5,3", options="header"]
+|===
+| Bundle | Contents | Usage
+
+| `kotlin`
+| kotlin-reflect, kotlin-stdlib, kotlinx-coroutines-core, kotlinx-coroutines-slf4j, kotlin-logging-jvm
+| Auto-added to all subprojects (line 87)
+
+| `jackson`
+| jackson-module-kotlin, jackson-datatype-jsr310
+| Auto-added to all subprojects (line 88)
+
+| `spring-web`
+| spring-boot-starter-webmvc, validation, aspectj, configuration-processor, spring-data-commons
+| common-web, todo-application
+
+| `spring-data`
+| spring-boot-starter-data-jpa, querydsl-jpa, querydsl-apt, jakarta-persistence-api
+| infrastructure
+
+| `cache`
+| spring-boot-starter-cache, caffeine, redisson-spring-boot-starter, redisson-spring-cache, lz4-java
+| infrastructure (two-tier caching)
+
+| `test`
+| spring-boot-starter-test, kotest-runner-junit5, kotest-assertions-core, kotest-property, kotest-extensions-spring, mockito-kotlin
+| Auto-added to all subprojects (line 89)
+
+| `openapi`
+| springdoc-openapi-starter-webmvc-ui
+| common-web (Swagger UI)
+
+| `metrics`
+| spring-boot-starter-actuator, spring-boot-micrometer-tracing-brave, micrometer-tracing-bridge-brave
+| common-web, infrastructure (observability)
+|===
+
+=== Subproject Common Configuration
+
+All subprojects automatically receive base configuration:
+
+.Evidence: root build.gradle.kts lines 34-108
+[source,kotlin]
+----
+subprojects {
+    apply(plugin = "org.jetbrains.kotlin.jvm")
+    apply(plugin = "org.jetbrains.kotlin.plugin.spring")
+    apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
+    apply(plugin = "io.spring.dependency-management")
+
+    // Import Spring Boot BOM for version management
+    the<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension>().apply {
+        imports {
+            mavenBom(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+        }
+    }
+
+    // ... Java/Kotlin configuration ...
+
+    // Common Dependencies
+    dependencies {
+        implementation(rootProject.libs.bundles.kotlin)
+        implementation(rootProject.libs.bundles.jackson)
+        testImplementation(rootProject.libs.bundles.test)
+    }
+
+    // Add common module to all subprojects (except common itself)
+    if (project.name != "common") {
+        dependencies {
+            implementation(project(":modules:common"))
+
+            compileOnly(rootProject.libs.lombok)
+            annotationProcessor(rootProject.libs.lombok)
+            testCompileOnly(rootProject.libs.lombok)
+            testAnnotationProcessor(rootProject.libs.lombok)
+        }
+    }
+}
+----
+
+**Key features**:
+
+1. **Plugins**: All subprojects get Kotlin JVM, Spring, JPA, Spring Dependency Management
+2. **BOM Import**: Spring Boot BOM for transitive version management
+3. **Common bundles**: kotlin, jackson, test added to all modules
+4. **Auto common dependency**: All modules except `common` itself get `common` as implementation dependency
+5. **Lombok support**: Added to all modules (compile + annotation processing)
+
+=== -app vs Library Module Build Configuration
+
+==== App Modules (-app suffix)
+
+.Evidence: root build.gradle.kts lines 114-132
+[source,kotlin]
+----
+configure(subprojects.filter { it.name.endsWith("-app") }) {
+    apply(plugin = "org.springframework.boot")
+    apply(plugin = "org.jetbrains.kotlin.kapt")
+
+    tasks.named<BootJar>("bootJar") {
+        enabled = true
+        archiveClassifier.set("boot")
+    }
+
+    tasks.named<Jar>("jar") {
+        enabled = false
+    }
+
+    dependencies {
+        val implementation by configurations
+        implementation(project(":modules:common-web"))
+        implementation(project(":modules:infrastructure"))
+    }
+}
+----
+
+**Characteristics**:
+
+* Spring Boot plugin applied → executable application
+* BootJar enabled → produces `-boot.jar` executable
+* Standard jar disabled → no library jar output
+* Auto-dependencies: common-web, infrastructure
+* KAPT plugin for annotation processing (QueryDSL, etc.)
+
+==== Library Modules (all others)
+
+.Evidence: root build.gradle.kts lines 137-145
+[source,kotlin]
+----
+configure(subprojects.filter { !it.name.endsWith("-app") }) {
+    afterEvaluate {
+        tasks.findByName("bootJar")?.let { (it as BootJar).enabled = false }
+    }
+
+    tasks.named<Jar>("jar") {
+        enabled = true
+    }
+}
+----
+
+**Characteristics**:
+
+* No Spring Boot plugin (unless explicitly applied like infrastructure)
+* BootJar disabled → no executable
+* Standard jar enabled → produces reusable library jar
+* Can be consumed by other modules
+
+=== Resolution Strategy
+
+Aggressive dependency management for consistency:
+
+.Evidence: root build.gradle.kts lines 150-161
+[source,kotlin]
+----
+configurations.all {
+    resolutionStrategy {
+        failOnVersionConflict()        // Build fails on version conflicts
+        preferProjectModules()         // Prefer local modules over external
+
+        force(rootProject.libs.kotlin.reflect)
+        force(rootProject.libs.kotlin.stdlib)
+
+        cacheChangingModulesFor(0, TimeUnit.SECONDS)
+        cacheDynamicVersionsFor(0, TimeUnit.SECONDS)
+    }
+}
+----
+
+**Features**:
+
+1. **failOnVersionConflict()**: Strict mode - no ambiguous versions allowed
+2. **preferProjectModules()**: Local modules take precedence over external dependencies
+3. **Force Kotlin versions**: Ensures consistent Kotlin stdlib/reflect across all modules
+4. **Zero cache**: Snapshots and changing modules always fetched fresh
+
+== Package Naming Convention
+
+All modules follow consistent package naming:
+
+[source]
+----
+com.myrealtrip.{modulename}/
+├── api/                # Controllers (bootstrap modules only)
+├── client/             # HTTP Client interfaces (@HttpExchange)
+├── config/             # Configuration classes
+├── dto/                # Data Transfer Objects
+├── entity/             # JPA Entities (infrastructure only)
+├── repository/         # Repositories (infrastructure only)
+└── service/            # Application services
+----
+
+=== Examples
+
+[cols="3,4", options="header"]
+|===
+| Module | Package Root
+
+| common
+| `com.myrealtrip.common`
+
+| common-web
+| `com.myrealtrip.commonweb`
+
+| infrastructure
+| `com.myrealtrip.infrastructure`
+
+| todo-application
+| `com.myrealtrip.todoapplication`
+
+| skeleton-api-app
+| `com.myrealtrip.skeletonapiapp`
+
+| skeleton-worker-app
+| `com.myrealtrip.skeletonworkerapp`
+
+| domain (planned)
+| `com.myrealtrip.domain`
+|===
+
+== Dependency Flow Diagram (Layered View)
+
+[mermaid]
+----
+graph TB
+    subgraph Layer6["Layer 6: Runtime Entrypoints"]
+        API[skeleton-api-app<br/>Controllers + Main]
+        Worker[skeleton-worker-app<br/>Schedulers + Main]
+    end
+
+    subgraph Layer5["Layer 5: Application Services"]
+        TodoApp[todo-application<br/>TodoService, TodoClient]
+    end
+
+    subgraph Layer4["Layer 4: Domain Models (Planned)"]
+        Domain[domain<br/>Business Rules]
+    end
+
+    subgraph Layer3["Layer 3: Technical Infrastructure"]
+        Infra[infrastructure<br/>DB, Cache, HTTP, Export]
+    end
+
+    subgraph Layer2["Layer 2: Web Infrastructure"]
+        CommonWeb[common-web<br/>Filters, Handlers, ApiResource]
+    end
+
+    subgraph Layer1["Layer 1: Foundation"]
+        Common[common<br/>Utilities, Values, Exceptions]
+    end
+
+    API --> TodoApp
+    API --> CommonWeb
+    API --> Infra
+
+    Worker --> CommonWeb
+    Worker --> Infra
+
+    TodoApp --> Infra
+    TodoApp --> CommonWeb
+    TodoApp --> Common
+
+    Domain -.-> Common
+
+    Infra --> Common
+    CommonWeb --> Common
+
+    style Common fill:#e1f5fe
+    style CommonWeb fill:#f3e5f5
+    style Infra fill:#fff3e0
+    style Domain fill:#fafafa,stroke-dasharray: 5 5
+    style TodoApp fill:#e8f5e9
+    style API fill:#ffebee
+    style Worker fill:#ffebee
+----
+
+== Summary
+
+=== Dependency Flow Rules
+
+1. **Downward only**: Higher layers depend on lower layers, never upward
+2. **Auto-injection**: `common` module automatically added to all non-common modules
+3. **App auto-deps**: `-app` modules automatically get common-web + infrastructure
+4. **No cycles**: Strict acyclic dependency graph enforced
+5. **Version catalog**: All versions centralized in libs.versions.toml
+6. **Fail on conflict**: Build fails on version conflicts (no silent resolution)
+
+=== Module Responsibilities
+
+[cols="2,3,5", options="header"]
+|===
+| Layer | Modules | Responsibility
+
+| Foundation
+| common
+| Value objects, utilities, exceptions (no external project deps)
+
+| Web Infra
+| common-web
+| HTTP infrastructure, filters, interceptors, ApiResource format
+
+| Technical Infra
+| infrastructure
+| Cache, database, HTTP clients, external services (POI, Slack)
+
+| Domain (Planned)
+| domain
+| Business rules, domain models (pure business logic)
+
+| Application
+| todo-application
+| Application services, orchestration, use cases
+
+| Runtime
+| skeleton-api-app, skeleton-worker-app
+| Spring Boot executables, controllers, schedulers
+|===
+
+=== Key Gradle Features
+
+* **Smart module selection**: `-app` suffix triggers Spring Boot plugin + auto-dependencies
+* **BOM management**: Spring Boot BOM provides consistent transitive versions
+* **Bundle strategy**: Logical groups (kotlin, spring-web, cache, test) for DRY configuration
+* **Strict resolution**: failOnVersionConflict() prevents ambiguous dependency versions
+* **Auto common**: Root build.gradle.kts injects common to all subprojects (except itself)

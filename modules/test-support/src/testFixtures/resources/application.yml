@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: test-app
+
+  profiles:
+    default: local
+    group:
+      embed: embed
+      local: local
+      test: test
+
+logging:
+  level:
+    com.myrealtrip: trace
+    org.springframework.web: debug
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %clr(%5.5p) [%15.15t] [%clr(%-36.36X{X-Trace-Id}){magenta}] --- %clr(%-40.40logger{39}){cyan} : %m%n%throwable"

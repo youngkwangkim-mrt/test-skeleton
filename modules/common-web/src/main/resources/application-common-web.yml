@@ -1,0 +1,106 @@
+# logging
+logging:
+  group:
+    app: "com.myrealtrip"
+    common-web: "com.myrealtrip.commonweb"
+    hikari: "com.zaxxer.hikari"
+    transaction: "org.springframework.transaction, org.springframework.orm.jpa.JpaTransactionManager, org.hibernate.engine.transaction.internal.TransactionImpl"
+    query: "org.hibernate.SQL, org.hibernate.SQL_SLOW"
+    bind: "org.hibernate.orm.jdbc.bind"
+  #  pattern:
+  #    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %clr(%5.5p) [%15.15t] [%clr(%-32.32X{traceId:-}){magenta},%clr(%-16.16X{spanId:-})] --- %clr(%-40.40logger{39}){cyan} : %m%n%throwable"
+  charset:
+    file: UTF-8
+    console: UTF-8
+
+# server
+server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
+  shutdown: graceful
+
+#
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
+  otlp:
+    metrics:
+      export:
+        enabled: false
+
+# springdoc (swagger)
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    tags-sorter: alpha
+    operations-sorter: alpha
+    default-model-rendering: model
+    display-request-duration: true
+
+#
+spring:
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+  web:
+    error:
+      include-binding-errors: never
+      include-message: never
+      whitelabel:
+        enabled: false
+      include-stacktrace: never
+      include-exception: false
+
+# =====================================================================================================================
+# local, dev
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: embed,local,dev,dev01,dev02
+#
+
+
+# =====================================================================================================================
+# test
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: test,test01,test02
+#
+
+
+# =====================================================================================================================
+# stage
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: stage
+#
+
+
+# =====================================================================================================================
+# prod
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+#
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

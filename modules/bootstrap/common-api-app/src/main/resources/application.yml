@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: common-api-app
+    version: @projectVersion@
+
+  profiles:
+    default: local
+    group:
+      embed: embed, local
+    include: common-web, infrastructure
+
+  docker:
+    compose:
+      enabled: false
+
+  threads:
+    virtual:
+      enabled: false
+
+# server
+server:
+  port: 8080
+  tomcat:
+    accept-count: 500
+    max-connections: 10000
+
+
+# =====================================================================================================================
+# local
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+logging:
+  level:
+    app: trace
+    sql: debug
+    query: debug
+    bind: trace
+    hikari: debug
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %clr(%5.5p) [%15.15t] [%clr(%-32.32X{traceId:-}){magenta},%clr(%-16.16X{spanId:-})] --- %clr(%-40.40logger{39}){cyan} : %m%n%throwable"
+
+
+# =====================================================================================================================
+# prod
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    app: info
+    sql: info
+    query: info
+    bind: info
+    hikari: info
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        app-name: common-api-app
+        app-version: @projectVersion@

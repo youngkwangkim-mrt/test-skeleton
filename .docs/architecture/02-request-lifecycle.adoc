@@ -1,0 +1,848 @@
+= Request Lifecycle
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+== Overview
+
+This document describes the complete lifecycle of an HTTP request in the hexagonal-skeleton application, from initial reception to final response.
+
+[mermaid]
+----
+sequenceDiagram
+    participant Client
+    participant ContentCachingFilter
+    participant AppTraceFilter
+    participant LogInterceptor
+    participant LogResponseBodyInterceptor
+    participant LogTraceAspect
+    participant CheckIpAspect
+    participant Controller
+    participant Service
+    participant Infrastructure
+    participant Client as External API
+
+    Client->>ContentCachingFilter: HTTP Request
+    activate ContentCachingFilter
+    ContentCachingFilter->>AppTraceFilter: Wrapped Request/Response
+    activate AppTraceFilter
+    Note over AppTraceFilter: Generate UUID v7<br/>Set MDC Context
+    AppTraceFilter->>LogInterceptor: Continue Filter Chain
+    activate LogInterceptor
+    Note over LogInterceptor: Log Request Info<br/>(IP, Headers, Body)
+    LogInterceptor->>LogResponseBodyInterceptor: preHandle()
+    activate LogResponseBodyInterceptor
+    LogResponseBodyInterceptor->>CheckIpAspect: Dispatch to Controller
+    activate CheckIpAspect
+    Note over CheckIpAspect: Validate IP Whitelist
+    CheckIpAspect->>LogTraceAspect: Proceed
+    activate LogTraceAspect
+    Note over LogTraceAspect: Begin Trace<br/>|-->
+    LogTraceAspect->>Controller: Invoke Method
+    activate Controller
+    Controller->>Service: Business Logic
+    activate Service
+    Service->>Infrastructure: Data Access / HTTP Client
+    activate Infrastructure
+    Infrastructure->>Client: External API Call
+    activate Client
+    Note over Infrastructure: HttpLoggingInterceptor<br/>HttpExchangeMethodAspect
+    Client-->>Infrastructure: Response
+    deactivate Client
+    Infrastructure-->>Service: Result
+    deactivate Infrastructure
+    Service-->>Controller: Domain Model
+    deactivate Service
+    Controller-->>LogTraceAspect: ApiResource<T>
+    deactivate Controller
+    Note over LogTraceAspect: End Trace<br/>|<-- elapsed=XXms
+    LogTraceAspect-->>LogResponseBodyInterceptor: Return Value
+    deactivate LogTraceAspect
+    deactivate CheckIpAspect
+    Note over LogResponseBodyInterceptor: afterCompletion()<br/>Log Response Body if @LogResponseBody
+    LogResponseBodyInterceptor-->>AppTraceFilter: Response
+    deactivate LogResponseBodyInterceptor
+    deactivate LogInterceptor
+    Note over AppTraceFilter: Measure Process Time<br/>Set Response Headers<br/>Clear MDC
+    AppTraceFilter-->>ContentCachingFilter: Response
+    deactivate AppTraceFilter
+    Note over ContentCachingFilter: Copy Cached Body<br/>to Actual Response
+    ContentCachingFilter-->>Client: HTTP Response
+    deactivate ContentCachingFilter
+----
+
+== Filter Chain (Ordered)
+
+Filters execute in a specific order defined by `@Order` annotations.
+
+=== ContentCachingFilter
+
+**Order:** `Ordered.HIGHEST_PRECEDENCE` (First)
+
+**Purpose:** Wraps request and response to enable multiple reads of request/response bodies.
+
+**Key Features:**
+
+* Wraps `HttpServletRequest` with `CachedBodyHttpServletRequest` to cache request body
+* Wraps `HttpServletResponse` with `ContentCachingResponseWrapper` to cache response body
+* Copies cached response body to actual response in `finally` block
+* Essential for logging request/response bodies without consuming streams
+
+**Implementation:**
+
+[source,kotlin]
+----
+@WebFilter(filterName = "ContentCachingFilter", urlPatterns = ["/**"])
+@Order(Ordered.HIGHEST_PRECEDENCE)
+class ContentCachingFilter : OncePerRequestFilter()
+----
+
+=== AppTraceFilter
+
+**Order:** `Ordered.HIGHEST_PRECEDENCE + 1` (Second)
+
+**Purpose:** Generates trace ID and sets MDC context for distributed tracing.
+
+**Key Features:**
+
+* Generates UUID v7 trace ID for each request
+* Sets MDC keys:
+** `X-ZZ-TraceId` - Application trace ID (UUID v7)
+** `X-B3-TraceId` - Micrometer tracing trace ID
+* Measures total request processing time
+* Logs warning if processing time exceeds 8 seconds
+* Clears MDC context after request completion
+* Excludes paths defined in `FILTER_EXCLUDE_PATH`
+
+**MDC Headers Set:**
+
+[cols="1,3"]
+|===
+| Header | Description
+
+| `X-ZZ-TraceId`
+| Application-level trace ID (UUID v7)
+
+| `X-B3-TraceId`
+| Distributed tracing ID (from Micrometer)
+
+| `X-ZZ-Res-Ts`
+| Response timestamp (milliseconds)
+|===
+
+**Excluded Paths:**
+
+[source,kotlin]
+----
+val FILTER_EXCLUDE_PATH = arrayOf(
+    "/_global/health",
+    "/css/", "/js/", "/img/", "/images/", "/error/",
+    "/v3/api-docs", "/swagger-ui", "/download/",
+    ".ico", "/.well-known"
+)
+----
+
+**Performance Threshold:**
+
+* Warns at: 8,000ms (8 seconds)
+* Logs debug: Process time for all requests
+* Logs warn: Process time exceeding threshold
+
+**Implementation:**
+
+[source,kotlin]
+----
+@OptIn(ExperimentalUuidApi::class)
+@WebFilter(filterName = "AppTraceFilter", urlPatterns = ["/**"])
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
+class AppTraceFilter(private val tracer: Tracer) : OncePerRequestFilter() {
+
+    override fun doFilterInternal(/* ... */) {
+        val appTraceId = Uuid.generateV7().toString()
+        setupTraceContext(response, appTraceId)
+        try {
+            filterChain.doFilter(request, response)
+        } finally {
+            logProcessTime(processTimeMs)
+            response.setHeader(APP_RESPONSE_TIMESTAMP, System.currentTimeMillis().toString())
+            MDC.clear()
+        }
+    }
+}
+----
+
+== Interceptor Chain
+
+Interceptors execute after filters but before AOP aspects.
+
+=== LogInterceptor
+
+**Purpose:** Logs detailed request information including headers, parameters, and body.
+
+**Key Features:**
+
+* Logs server IP and client IP
+* Logs HTTP method and URI
+* Logs request headers (filtered list)
+* Logs request parameters and body
+* Respects `@ExcludeRequestLog` annotation in production environment
+* Excluded paths: Same as `INTERCEPTOR_EXCLUDE_PATH`
+
+**Loggable Headers:**
+
+* Standard: `authorization`, `content-type`, `accept`, `referer`, `b3`, `traceparent`, `tracestate`
+* Prefix patterns: `x-b3-*`, `x-request-*`
+
+**Annotation Support:**
+
+[source,kotlin]
+----
+@ExcludeRequestLog
+@GetMapping("/sensitive")
+fun sensitiveEndpoint() {
+    // Request info not logged in production
+}
+----
+
+**Log Format:**
+
+[source]
+----
+# ==> REQUEST INFO ::
+ServerIp = 192.168.1.10 , ClientIp = 203.0.113.42
+RequestURI = GET /api/v1/users/123
+Headers:
+  content-type = application/json
+  x-b3-traceid = 1234567890abcdef
+  authorization = Bearer ***
+RequestParameters = page=1&size=10
+RequestBody = {"userId":123}
+----
+
+=== LogResponseBodyInterceptor
+
+**Purpose:** Logs response body for methods annotated with `@LogResponseBody`.
+
+**Key Features:**
+
+* Executes in `afterCompletion` phase
+* Only logs if `@LogResponseBody` annotation present
+* Configurable log level via annotation
+* Configurable max length with truncation support
+* Respects `printAll` flag to disable truncation
+
+**Annotation Configuration:**
+
+[source,kotlin]
+----
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class LogResponseBody(
+    val value: Boolean = true,
+    val maxLength: Int = 1000,
+    val logLevel: Level = Level.INFO,
+    val printAll: Boolean = false
+)
+----
+
+**Usage Example:**
+
+[source,kotlin]
+----
+@GetMapping("/{id}")
+@LogResponseBody(maxLength = 500, logLevel = Level.DEBUG)
+fun findById(@PathVariable id: Int) = ApiResource.success(todoService.findById(id))
+----
+
+**Truncation Behavior:**
+
+* Default max length: 1000 characters
+* Truncated messages append: ` ...(truncated)...`
+* Set `printAll = true` to disable truncation
+
+== AOP Layer
+
+AOP aspects provide cross-cutting concerns like tracing, IP validation, and HTTP client logging.
+
+=== LogTraceAspect
+
+**Order:** `@Order(2)`
+
+**Purpose:** Traces method execution with hierarchical depth visualization.
+
+**Key Features:**
+
+* Thread-local based call hierarchy tracking
+* Tree-style log output with indentation
+* Measures method execution time
+* Automatically traces:
+** All `*Controller` classes
+** All `*Service` classes
+** Methods annotated with `@LogTrace`
+* Excludes methods annotated with `@ExcludeLogTrace`
+
+**Pointcut Definition:**
+
+[source,kotlin]
+----
+@Pointcut("(allController() || allService() || logTraceAnnotation()) && !excludeLogTraceAnnotation()")
+fun all() = Unit
+----
+
+**Log Output Format:**
+
+[source]
+----
+|--> TodoController.findAll()
+|    |--> TodoService.findAll()
+|    |    |--> TodoClient.findAll()
+|    |    |<-- TodoClient.findAll() elapsed=245ms
+|    |<-- TodoService.findAll() elapsed=248ms
+|<-- TodoController.findAll() elapsed=250ms
+----
+
+**Implementation Details:**
+
+* Uses `ThreadLocal<TraceId>` to track call depth
+* Indentation: `|    ` repeated by level
+* Prefixes:
+** `|-->` - Method entry
+** `|<--` - Normal completion
+** `|<X-` - Exception completion
+* Logs `KnownException` at DEBUG level (expected errors)
+* Logs other exceptions at WARN level with exception details
+
+=== CheckIpAspect
+
+**Order:** `@Order(3)`
+
+**Purpose:** Enforces IP whitelist validation via `@CheckIp` annotation.
+
+**Key Features:**
+
+* Supports class-level and method-level annotations
+* Method-level annotation takes precedence
+* Always allows local IPs: `127.0.0.1`, `localhost`, `::1`
+* Supports multiple IP pattern formats:
+** Exact: `192.168.1.10`
+** Wildcard: `192.168.*.*`
+** CIDR: `192.168.0.0/16`
+* Throws `UnauthorizedIpException` if IP not whitelisted
+
+**Usage Example:**
+
+[source,kotlin]
+----
+@CheckIp(allowedIps = ["192.168.1.*", "10.0.0.0/8"])
+@RestController
+class AdminController {
+
+    @GetMapping("/admin/users")
+    fun getUsers() { /* ... */ }
+}
+----
+
+**IP Validation Order:**
+
+1. Check if IP is local (always allowed)
+2. Check if IP matches any allowed pattern
+3. Throw `UnauthorizedIpException` if no match
+
+=== HttpExchangeMethodAspect (Infrastructure)
+
+**Purpose:** Captures method names from `@HttpExchange` interfaces for logging.
+
+**Key Features:**
+
+* Captures method name before HTTP call
+* Stores in `ThreadLocal` context (`HttpExchangeMethodContext`)
+* Used by `HttpLoggingInterceptor` to build meaningful log tags
+* Automatically clears context after method execution
+
+**Integration:**
+
+[source,kotlin]
+----
+@Aspect
+@Component
+class HttpExchangeMethodAspect {
+
+    @Around("@within(org.springframework.web.service.annotation.HttpExchange)")
+    fun captureMethodName(joinPoint: ProceedingJoinPoint): Any? {
+        HttpExchangeMethodContext.set(joinPoint.signature.name)
+        try {
+            return joinPoint.proceed()
+        } finally {
+            HttpExchangeMethodContext.clear()
+        }
+    }
+}
+----
+
+**Log Tag Format:**
+
+[source]
+----
+[TodoClient#findAll] ---> GET https://jsonplaceholder.typicode.com/todos
+[TodoClient#findAll] <--- 200 (245ms)
+----
+
+== Controller Layer
+
+Controllers handle HTTP requests and return standardized responses.
+
+=== Response Wrapping
+
+All API endpoints (except `GlobalController` and `HomeController`) must wrap responses with `ApiResource`.
+
+**Standard Pattern:**
+
+[source,kotlin]
+----
+@RestController
+@RequestMapping("/api/v1/todos")
+class TodoController(private val todoService: TodoService) {
+
+    @GetMapping
+    fun findAll() = ApiResource.success(todoService.findAll())
+
+    @GetMapping("/{id}")
+    fun findById(@PathVariable id: Int) = ApiResource.success(todoService.findById(id))
+
+    @DeleteMapping("/{id}")
+    fun delete(@PathVariable id: Long): ResponseEntity<ApiResource<String>> {
+        todoService.delete(id)
+        return ApiResource.success()
+    }
+}
+----
+
+**Response Structure:**
+
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "size": 1
+  },
+  "data": { /* ... */ }
+}
+----
+
+=== Annotation Support
+
+[cols="1,3"]
+|===
+| Annotation | Purpose
+
+| `@LogResponseBody`
+| Logs response body after method execution
+
+| `@ExcludeRequestLog`
+| Skips request logging in production
+
+| `@CheckIp`
+| Enforces IP whitelist validation
+
+| `@LogTrace`
+| Explicitly enables method tracing
+
+| `@ExcludeLogTrace`
+| Explicitly disables method tracing
+|===
+
+== Service/Application Layer
+
+Service layer orchestrates business logic and domain model mapping.
+
+**Responsibilities:**
+
+* Business logic orchestration
+* Domain model transformation
+* Transaction management
+* Validation and error handling
+
+**Example:**
+
+[source,kotlin]
+----
+@Service
+class TodoService(
+    private val todoClient: TodoClient
+) {
+    fun findAll(): List<Todo> {
+        return todoClient.findAll()
+            .map { it.toDomain() }
+    }
+
+    fun findById(id: Int): Todo {
+        return todoClient.findById(id).toDomain()
+    }
+}
+----
+
+**Tracing:**
+
+* Automatically traced by `LogTraceAspect`
+* Shows hierarchical call depth
+* Measures execution time per method
+
+== Infrastructure Layer (Outbound)
+
+Infrastructure layer handles external system integration.
+
+=== HTTP Client (@HttpExchange)
+
+**Declarative HTTP Clients:**
+
+[source,kotlin]
+----
+@HttpExchange("/todos")
+interface TodoClient {
+
+    @GetExchange
+    fun findAll(): List<TodoDto>
+
+    @GetExchange("/{id}")
+    fun findById(@PathVariable id: Int): TodoDto
+
+    @PostExchange
+    fun create(@RequestBody todo: TodoDto): TodoDto
+}
+----
+
+**Configuration:**
+
+[source,kotlin]
+----
+@Configuration
+@ImportHttpServices(group = "todo", types = [TodoClient::class])
+class TodoClientConfig {
+
+    @Bean
+    fun todoClientGroupConfigurer(): RestClientHttpServiceGroupConfigurer {
+        return RestClientHttpServiceGroupConfigurer { groups ->
+            groups.filterByName("todo")
+                .forEachClient { _, builder ->
+                    builder.baseUrl("https://jsonplaceholder.typicode.com")
+                        .requestInterceptor(HttpLoggingInterceptor("TodoClient"))
+                }
+        }
+    }
+}
+----
+
+=== HttpLoggingInterceptor
+
+**Purpose:** Logs HTTP client request/response details.
+
+**Key Features:**
+
+* Two logging levels: `SIMPLE` and `FULL`
+* Logs request method, URI, body size
+* Logs response status, elapsed time, body size
+* Measures execution time in milliseconds
+* Buffers response body for logging without consuming stream
+* Uses method name from `HttpExchangeMethodContext` for meaningful tags
+
+**Log Levels:**
+
+[cols="1,3"]
+|===
+| Level | Content
+
+| `SIMPLE`
+| Request/response first and last lines only
+
+| `FULL`
+| Includes headers and body content
+|===
+
+**Log Output (FULL):**
+
+[source]
+----
+[TodoClient#findAll] ---> GET https://jsonplaceholder.typicode.com/todos
+[TodoClient#findAll] content-type: application/json
+[TodoClient#findAll] accept: application/json
+[TodoClient#findAll] ---> END (0-byte body)
+[TodoClient#findAll] <--- 200 (245ms)
+[TodoClient#findAll] content-type: application/json
+[TodoClient#findAll] [{"id":1,"title":"delectus aut autem","completed":false}]
+[TodoClient#findAll] <--- END (5234-byte body)
+----
+
+**Log Output (SIMPLE):**
+
+[source]
+----
+[TodoClient#findAll] ---> GET https://jsonplaceholder.typicode.com/todos
+[TodoClient#findAll] ---> END (0-byte body)
+[TodoClient#findAll] <--- 200 (245ms)
+[TodoClient#findAll] <--- END (5234-byte body)
+----
+
+== Exception Handling
+
+All exceptions are handled by `GlobalExceptionHandlerV2`.
+
+=== Exception Mapping
+
+[cols="1,1,1,1"]
+|===
+| Exception Type | ErrorCode | HTTP Status | Stack Trace
+
+| `KnownException`
+| From exception
+| From ErrorCode
+| No (INFO level)
+
+| `BizRuntimeException`
+| From exception
+| From ErrorCode
+| Configurable (default: Yes)
+
+| `BizException`
+| From exception
+| From ErrorCode
+| Configurable (default: Yes)
+
+| `NoResourceFoundException`
+| `NOT_FOUND`
+| 404
+| Yes
+
+| `HttpRequestMethodNotSupportedException`
+| `NOT_FOUND`
+| 404
+| Yes
+
+| `MethodArgumentNotValidException`
+| `INVALID_ARGUMENT`
+| 400
+| No
+
+| `MethodArgumentTypeMismatchException`
+| `INVALID_ARGUMENT`
+| 400
+| No
+
+| `MissingRequestValueException`
+| `INVALID_ARGUMENT`
+| 400
+| No
+
+| `HandlerMethodValidationException`
+| `INVALID_ARGUMENT`
+| 400
+| No
+
+| `HttpMessageNotReadableException`
+| `NOT_READABLE`
+| 400
+| No
+
+| `HttpMediaTypeNotSupportedException`
+| `NOT_READABLE`
+| 415
+| No
+
+| `MultipartException`
+| `INVALID_ARGUMENT`
+| 400
+| Yes
+
+| `AccessDeniedException`
+| `FORBIDDEN`
+| 403
+| Yes
+
+| `IllegalArgumentException`
+| `ILLEGAL_ARGUMENT`
+| 400
+| Yes
+
+| `IllegalStateException`
+| `ILLEGAL_STATE`
+| 500
+| Yes
+
+| `NoSuchElementException`
+| `DATA_NOT_FOUND`
+| 404
+| Yes
+
+| `UnsupportedOperationException`
+| `UNSUPPORTED_OPERATION`
+| 501
+| Yes
+
+| All other exceptions
+| `SERVER_ERROR`
+| 500
+| Yes
+|===
+
+=== Error Response Format
+
+[source,json]
+----
+{
+  "status": {
+    "status": 404,
+    "code": "DATA_NOT_FOUND",
+    "message": "Requested data not found"
+  },
+  "meta": {
+    "size": 0
+  },
+  "data": "User not found: 123"
+}
+----
+
+=== Validation Error Response
+
+[source,json]
+----
+{
+  "status": {
+    "status": 400,
+    "code": "INVALID_ARGUMENT",
+    "message": "Invalid argument provided"
+  },
+  "meta": {
+    "size": 0
+  },
+  "data": {
+    "email": "must be a valid email address",
+    "age": "must be greater than or equal to 18"
+  }
+}
+----
+
+=== Custom Exception Example
+
+[source,kotlin]
+----
+class TodoNotFoundException(id: Int) : KnownException(
+    ErrorCode.DATA_NOT_FOUND,
+    "Todo not found: $id"
+)
+
+// Usage
+throw TodoNotFoundException(123)
+
+// Response: 404 NOT_FOUND (no stack trace logged)
+----
+
+== Request Flow Summary
+
+1. **ContentCachingFilter** - Wraps request/response for body caching
+2. **AppTraceFilter** - Generates trace ID, sets MDC, measures time
+3. **LogInterceptor** - Logs request details (IP, headers, body)
+4. **LogResponseBodyInterceptor** - Prepares for response logging
+5. **CheckIpAspect** - Validates IP whitelist (if `@CheckIp` present)
+6. **LogTraceAspect** - Begins method trace (hierarchical)
+7. **Controller** - Handles request, returns `ApiResource<T>`
+8. **Service** - Executes business logic
+9. **Infrastructure** - Calls external APIs/databases
+   * **HttpExchangeMethodAspect** - Captures method name
+   * **HttpLoggingInterceptor** - Logs HTTP client calls
+10. **Service** - Returns domain model
+11. **Controller** - Returns `ApiResource<T>`
+12. **LogTraceAspect** - Ends method trace
+13. **LogResponseBodyInterceptor** - Logs response body (if `@LogResponseBody`)
+14. **AppTraceFilter** - Logs process time, clears MDC
+15. **ContentCachingFilter** - Copies cached response to actual response
+16. **Client** - Receives HTTP response
+
+== Performance Considerations
+
+=== Process Time Thresholds
+
+* **Warning threshold:** 8,000ms (8 seconds)
+* Logged at DEBUG level: All requests
+* Logged at WARN level: Requests exceeding threshold
+
+=== Body Caching Overhead
+
+* **Request body:** Cached by `CachedBodyHttpServletRequest`
+* **Response body:** Cached by `ContentCachingResponseWrapper`
+* Impact: Minimal for typical JSON payloads (<1MB)
+* Consideration: Large file uploads/downloads may increase memory usage
+
+=== ThreadLocal Cleanup
+
+* **MDC:** Cleared in `AppTraceFilter` finally block
+* **LogTrace:** Cleared after method execution
+* **HttpExchangeMethodContext:** Cleared after HTTP call
+
+=== Excluded Paths
+
+Filters and interceptors are disabled for:
+
+* Health check endpoints
+* Static resources (CSS, JS, images)
+* Swagger UI
+* Error pages
+* Well-known endpoints
+
+This reduces overhead for non-business requests.
+
+== Configuration
+
+=== Filter Order
+
+[source,kotlin]
+----
+ContentCachingFilter: Ordered.HIGHEST_PRECEDENCE      // -2147483648
+AppTraceFilter:       Ordered.HIGHEST_PRECEDENCE + 1  // -2147483647
+----
+
+=== AOP Order
+
+[source,kotlin]
+----
+LogTraceAspect:  @Order(2)
+CheckIpAspect:   @Order(3)
+----
+
+Lower order values execute first in `@Around` advice.
+
+=== Excluded Paths
+
+Defined in `GlobalConstants.kt`:
+
+[source,kotlin]
+----
+val FILTER_EXCLUDE_PATH = arrayOf(
+    "/_global/health",
+    "/css/", "/js/", "/img/", "/images/", "/error/",
+    "/v3/api-docs", "/swagger-ui", "/download/",
+    ".ico", "/.well-known"
+)
+
+val INTERCEPTOR_EXCLUDE_PATH = listOf(
+    "/_global/health",
+    "/css/**", "/js/**", "/img/**", "/images/**",
+    "/error/**", "/download/**", "/common/file**",
+    "/swagger-ui/**", "/v3/api-docs/**", "/*.ico",
+    "/.well-known/**"
+)
+----
+
+== See Also
+
+* xref:01-modules-and-architecture.adoc[Modules and Architecture]
+* xref:03-cache-strategy.adoc[Cache Strategy]
+* `modules/common-web/README.adoc` - Common Web Module Documentation
+* `modules/common/README.adoc` - Common Module Documentation

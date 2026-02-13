@@ -1,0 +1,506 @@
+= 예시 및 AsciiDoc 작성
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== 샘플 코드: HolidayControllerDocsTest 분석
+
+프로젝트의 실제 구현 예시인 `HolidayControllerDocsTest`를 분석합니다.
+
+=== 테스트 클래스 구조
+
+[source,kotlin]
+----
+class HolidayControllerDocsTest : RestDocsSupport() {
+
+    private val holidayFacade: HolidayFacade = mock()
+
+    override fun initController(): Any = HolidayController(holidayFacade)
+
+    // 각 엔드포인트별 테스트 메서드...
+}
+----
+
+=== GET - 배열 응답 (연도별 조회, 페이징)
+
+[source,kotlin]
+----
+@Test
+fun `get holidays by year`(): Unit {
+    // given - 페이징된 배열 응답 설정
+    val holidays = listOf(
+        HolidayDto(1L, LocalDate.of(2026, 2, 16), "설날"),
+        HolidayDto(2L, LocalDate.of(2026, 2, 17), "설날"),
+        HolidayDto(3L, LocalDate.of(2026, 3, 1), "삼일절"),
+    )
+    val page = PageImpl(holidays, PageRequest.of(0, 20), holidays.size.toLong())
+    given(holidayFacade.findPageByYear(any(), any())).willReturn(page)
+
+    // when & then
+    mockMvc.perform(
+        get("/api/holidays/{year}", 2026)
+            .param("page", "0")
+            .param("size", "20")
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                // 경로 파라미터 문서화
+                pathParameters(
+                    parameterWithName("year").description("조회할 연도"),
+                ),
+                // 쿼리 파라미터 (페이징)
+                queryParameters(
+                    *pageRequestFormat().toTypedArray(),
+                ),
+                // Subsection 전략: status/meta/data[] 필드 정의
+                responseFields(
+                    *responseArrayCommonFieldsSubsection(),
+                    subsectionWithPath("meta.pageInfo").type(JsonFieldType.OBJECT)
+                        .optional().description("페이지 정보"),
+                ),
+                // 페이지 정보 필드
+                responseFields(
+                    beneathPath("meta.pageInfo").withSubsectionId("data.page"),
+                    *pageCommonFormat().toTypedArray(),
+                ),
+                // data[] 필드 별도 정의
+                dataResponseFields(
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                ),
+            )
+        )
+}
+----
+
+생성된 스니펫:
+* `get-holidays-by-year/path-parameters.adoc` - 경로 파라미터
+* `get-holidays-by-year/query-parameters.adoc` - 쿼리 파라미터 (페이징)
+* `get-holidays-by-year/response-fields.adoc` - status, meta, data[] 필드
+* `get-holidays-by-year/response-fields-data.page.adoc` - 페이지 정보
+* `get-holidays-by-year/response-fields-data.adoc` - data 필드
+
+=== GET - 배열 응답 (연도/월별 조회, 페이징)
+
+[source,kotlin]
+----
+@Test
+fun `get holidays by year and month`(): Unit {
+    // given
+    val holidays = listOf(
+        HolidayDto(1L, LocalDate.of(2026, 2, 16), "설날"),
+        HolidayDto(2L, LocalDate.of(2026, 2, 17), "설날"),
+    )
+    val page = PageImpl(holidays, PageRequest.of(0, 20), holidays.size.toLong())
+    given(holidayFacade.findPageByYearAndMonth(any(), any(), any())).willReturn(page)
+
+    // when & then
+    mockMvc.perform(
+        get("/api/holidays/{year}/{month}", 2026, 2)
+            .param("page", "0")
+            .param("size", "20")
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("year").description("조회할 연도"),
+                    parameterWithName("month").description("조회할 월"),
+                ),
+                queryParameters(
+                    *pageRequestFormat().toTypedArray(),
+                ),
+                responseFields(
+                    *responseArrayCommonFieldsSubsection(),
+                    subsectionWithPath("meta.pageInfo").type(JsonFieldType.OBJECT)
+                        .optional().description("페이지 정보"),
+                ),
+                responseFields(
+                    beneathPath("meta.pageInfo").withSubsectionId("data.page"),
+                    *pageCommonFormat().toTypedArray(),
+                ),
+                dataResponseFields(
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                ),
+            )
+        )
+}
+----
+
+=== GET - 객체 응답 (날짜별 조회)
+
+[source,kotlin]
+----
+@Test
+fun `get holidays by date`(): Unit {
+    // given
+    val response = HolidaysResponse.from(
+        listOf(
+            HolidayInfo(1L, LocalDate.of(2026, 2, 16), "설날"),
+        )
+    )
+    given(holidayFacade.findByDate(2026, 2, 16)).willReturn(response)
+
+    // when & then
+    mockMvc.perform(get("/api/holidays/{year}/{month}/{day}", 2026, 2, 16))
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("year").description("조회할 연도"),
+                    parameterWithName("month").description("조회할 월"),
+                    parameterWithName("day").description("조회할 일"),
+                ),
+                responseFields(*responseCommonFieldsSubsection()),
+                dataResponseFields(
+                    "holidays" type ARRAY means "공휴일 목록",
+                    "holidays[].date" type DATE means "공휴일 날짜",
+                    "holidays[].name" type STRING means "공휴일 이름",
+                ),
+            )
+        )
+}
+----
+
+=== POST - 단일 객체 응답 (Subsection 전략)
+
+[source,kotlin]
+----
+@Test
+fun `create holiday`(): Unit {
+    // given - 단일 객체 응답 설정
+    val holidayDto = HolidayDto(1L, LocalDate.of(2026, 1, 1), "신정")
+    given(holidayFacade.create(any())).willReturn(holidayDto)
+
+    val request = """
+        {
+            "holidayDate": "2026-01-01",
+            "name": "신정"
+        }
+    """.trimIndent()
+
+    // when & then
+    mockMvc.perform(
+        post("/api/holidays")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(request)
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                // 요청 필드 문서화
+                requestFields(
+                    *fields(
+                        "holidayDate" type DATE means "공휴일 날짜",
+                        "name" type STRING means "공휴일 이름",
+                    )
+                ),
+                // Subsection 전략: status/meta 필드 정의
+                responseFields(*responseCommonFieldsSubsection()),
+                // data 필드 별도 정의 (단일 객체)
+                dataResponseFields(
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                ),
+            )
+        )
+}
+----
+
+주요 특징:
+* `requestFields` - 요청 필드 문서화
+* `responseCommonFieldsSubsection()` - 공통 필드
+* `dataResponseFields()` - 데이터 필드 (경로 접두사 "data." 자동 추가 안함)
+
+=== POST - 배열 응답 (Subsection 전략)
+
+[source,kotlin]
+----
+@Test
+fun `create holidays bulk`(): Unit {
+    // given - 배열 응답 설정
+    val holidayDtos = listOf(
+        HolidayDto(1L, LocalDate.of(2026, 2, 16), "설날"),
+        HolidayDto(2L, LocalDate.of(2026, 2, 17), "설날"),
+    )
+    given(holidayFacade.createAll(any())).willReturn(holidayDtos)
+
+    val request = """
+        {
+            "holidays": [
+                { "holidayDate": "2026-02-16", "name": "설날" },
+                { "holidayDate": "2026-02-17", "name": "설날" }
+            ]
+        }
+    """.trimIndent()
+
+    // when & then
+    mockMvc.perform(
+        post("/api/holidays/bulk")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(request)
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                requestFields(
+                    *fields(
+                        "holidays" type ARRAY means "생성할 공휴일 목록",
+                        "holidays[].holidayDate" type DATE means "공휴일 날짜",
+                        "holidays[].name" type STRING means "공휴일 이름",
+                    )
+                ),
+                // Subsection 전략: status/meta/data[] 필드 정의
+                responseFields(*responseArrayCommonFieldsSubsection()),
+                // data[] 내부 필드 정의
+                dataResponseFields(
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                ),
+            )
+        )
+}
+----
+
+주요 차이점:
+* `responseArrayCommonFieldsSubsection()` - 배열 응답용 (data[])
+* dataResponseFields의 필드는 배열 요소의 필드
+
+=== PUT - 업데이트 응답
+
+[source,kotlin]
+----
+@Test
+fun `update holiday`(): Unit {
+    // given
+    val holidayDto = HolidayDto(1L, LocalDate.of(2026, 2, 16), "설날 (수정)")
+    given(holidayFacade.update(any(), any())).willReturn(holidayDto)
+
+    val request = """
+        {
+            "holidayDate": "2026-02-16",
+            "name": "설날 (수정)"
+        }
+    """.trimIndent()
+
+    // when & then
+    mockMvc.perform(
+        put("/api/holidays/{id}", 1L)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(request)
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("id").description("수정할 공휴일 ID"),
+                ),
+                requestFields(
+                    *fields(
+                        "holidayDate" type DATE means "공휴일 날짜",
+                        "name" type STRING means "공휴일 이름",
+                    )
+                ),
+                responseFields(*responseCommonFieldsSubsection()),
+                dataResponseFields(
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                ),
+            )
+        )
+}
+----
+
+=== DELETE - 빈 응답
+
+[source,kotlin]
+----
+@Test
+fun `delete holiday`(): Unit {
+    // given
+    doNothing().`when`(holidayFacade).delete(any())
+
+    // when & then
+    mockMvc.perform(delete("/api/holidays/{id}", 1L))
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("id").description("삭제할 공휴일 ID"),
+                ),
+                // 빈 응답: responseStringCommonFields 사용
+                responseFields(*responseStringCommonFields()),
+            )
+        )
+}
+----
+
+== AsciiDoc 문서 작성
+
+REST Docs 테스트에서 생성된 스니펫을 활용하여 API 문서를 작성합니다.
+
+=== 생성된 스니펫 위치
+
+[source,text]
+----
+build/generated-snippets/
+└── {test-class-name}/
+    └── {method-name}/
+        ├── response-fields.adoc
+        ├── response-fields-data.adoc
+        ├── request-fields.adoc
+        ├── path-parameters.adoc
+        └── ...
+----
+
+예시: `HolidayControllerDocsTest`의 테스트가 생성하는 스니펫
+
+[source,text]
+----
+build/generated-snippets/
+├── get-holidays-by-year/
+│   ├── path-parameters.adoc
+│   ├── query-parameters.adoc
+│   ├── response-fields.adoc
+│   ├── response-fields-data.page.adoc
+│   └── response-fields-data.adoc
+├── get-holidays-by-year-and-month/
+│   ├── path-parameters.adoc
+│   ├── query-parameters.adoc
+│   ├── response-fields.adoc
+│   ├── response-fields-data.page.adoc
+│   └── response-fields-data.adoc
+├── get-holidays-by-date/
+│   ├── path-parameters.adoc
+│   ├── response-fields.adoc
+│   └── response-fields-data.adoc
+├── create-holiday/
+│   ├── request-fields.adoc
+│   ├── response-fields.adoc
+│   └── response-fields-data.adoc
+├── create-holidays-bulk/
+│   ├── request-fields.adoc
+│   ├── response-fields.adoc
+│   └── response-fields-data.adoc
+├── update-holiday/
+│   ├── path-parameters.adoc
+│   ├── request-fields.adoc
+│   ├── response-fields.adoc
+│   └── response-fields-data.adoc
+└── delete-holiday/
+    ├── path-parameters.adoc
+    └── response-fields.adoc
+----
+
+=== 스니펫 포함 문법
+
+AsciiDoc 문서에서 생성된 스니펫을 포함합니다.
+
+==== 경로 파라미터
+
+[source,asciidoc]
+----
+== 요청 파라미터
+
+include::{generated-snippets}/get-holidays-by-year/path-parameters.adoc[]
+----
+
+==== 요청 필드
+
+[source,asciidoc]
+----
+== 요청 본문
+
+include::{generated-snippets}/create-holiday/request-fields.adoc[]
+----
+
+==== 응답 필드 (Subsection 전략)
+
+[source,asciidoc]
+----
+== 응답 본문
+
+include::{generated-snippets}/create-holiday/response-fields.adoc[]
+
+=== 데이터 필드
+
+include::{generated-snippets}/create-holiday/response-fields-data.adoc[]
+----
+
+==== 응답 필드 (전체 필드)
+
+[source,asciidoc]
+----
+== 응답 본문
+
+include::{generated-snippets}/get-holidays-by-year/response-fields.adoc[]
+----
+
+=== 예시: 완성된 API 문서
+
+[source,asciidoc]
+....
+== 공휴일 조회 (연도별)
+
+특정 연도의 모든 공휴일을 조회합니다.
+
+=== HTTP 요청
+
+[source,http]
+----
+GET /api/holidays/2026 HTTP/1.1
+Host: localhost:8080
+----
+
+=== 경로 파라미터
+
+include::{generated-snippets}/get-holidays-by-year/path-parameters.adoc[]
+
+=== 응답 본문
+
+include::{generated-snippets}/get-holidays-by-year/response-fields.adoc[]
+
+==== 데이터 필드
+
+include::{generated-snippets}/get-holidays-by-year/response-fields-data.adoc[]
+
+=== 응답 예시
+
+[source,json]
+----
+{
+  "status": {
+    "status": 200,
+    "code": "SUCCESS",
+    "message": "Operation successful"
+  },
+  "meta": {
+    "x-b3-traceid": "...",
+    "appTraceId": "01946a2c-5b1e-7a00-8e47-0242ac110002",
+    "responseTs": 1738473600000,
+    "size": 3
+  },
+  "data": {
+    "holidays": [
+      { "date": "2026-02-16", "name": "설날" },
+      { "date": "2026-02-17", "name": "설날" },
+      { "date": "2026-03-01", "name": "삼일절" }
+    ]
+  }
+}
+----
+....
+
+== 다음 단계
+
+* xref:04-reference.adoc[참고 자료] - Best Practices, 트러블슈팅, 체크리스트

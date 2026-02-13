@@ -1,0 +1,75 @@
+name: Update README Badges
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'gradle/libs.versions.toml'
+
+jobs:
+  update-badges:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract versions from libs.versions.toml
+        id: versions
+        run: |
+          TOML_FILE="gradle/libs.versions.toml"
+
+          # Extract versions using grep and sed (match only lines with quoted values)
+          JAVA_VERSION=$(grep -E '^java\s*=\s*"' "$TOML_FILE" | sed 's/.*"\(.*\)"/\1/')
+          KOTLIN_VERSION=$(grep -E '^kotlin\s*=\s*"' "$TOML_FILE" | sed 's/.*"\(.*\)"/\1/')
+          SPRING_BOOT_VERSION=$(grep -E '^spring-boot\s*=\s*"' "$TOML_FILE" | sed 's/.*"\(.*\)"/\1/')
+
+          echo "java=$JAVA_VERSION" >> $GITHUB_OUTPUT
+          echo "kotlin=$KOTLIN_VERSION" >> $GITHUB_OUTPUT
+          echo "spring_boot=$SPRING_BOOT_VERSION" >> $GITHUB_OUTPUT
+
+          echo "Extracted versions:"
+          echo "  Java: $JAVA_VERSION"
+          echo "  Kotlin: $KOTLIN_VERSION"
+          echo "  Spring Boot: $SPRING_BOOT_VERSION"
+
+      - name: Update README badges
+        run: |
+          README_FILE="readme.adoc"
+
+          JAVA_VERSION="${{ steps.versions.outputs.java }}"
+          KOTLIN_VERSION="${{ steps.versions.outputs.kotlin }}"
+          SPRING_BOOT_VERSION="${{ steps.versions.outputs.spring_boot }}"
+
+          # Update Java badge
+          sed -i "s|badge/Java-[^-]*-ED8B00|badge/Java-${JAVA_VERSION}-ED8B00|g" "$README_FILE"
+
+          # Update Kotlin badge
+          sed -i "s|badge/Kotlin-[^-]*-7F52FF|badge/Kotlin-${KOTLIN_VERSION}-7F52FF|g" "$README_FILE"
+
+          # Update Spring Boot badge (URL encode the space as %20)
+          sed -i "s|badge/Spring%20Boot-[^-]*-6DB33F|badge/Spring%20Boot-${SPRING_BOOT_VERSION}-6DB33F|g" "$README_FILE"
+
+          echo "Updated badges in $README_FILE"
+          cat "$README_FILE" | head -15
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet readme.adoc; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add readme.adoc
+          git commit -m "docs: update readme badges to match libs.versions.toml"
+          git push

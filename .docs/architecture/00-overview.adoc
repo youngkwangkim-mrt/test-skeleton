@@ -1,0 +1,599 @@
+= Architecture Overview
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:sectnums:
+:last-verified: 2026-02-13
+
+== Design Philosophy
+
+=== Layered Multi-Module Architecture
+
+This project adopts a pragmatic **layered multi-module approach with dependency inversion**, drawing inspiration from both Layered Architecture and Hexagonal Architecture (Ports & Adapters):
+
+* **Separation of Concerns**: Business logic isolated from technical infrastructure
+* **Testability**: Core business rules testable without external dependencies
+* **Flexibility**: Easy to swap implementations (e.g., databases, message brokers)
+* **Maintainability**: Clear boundaries between layers reduce coupling
+
+=== Key Design Decisions
+
+* **Ports** are implicit - application modules define contracts (service interfaces, DTOs)
+* **Adapters** are explicit - infrastructure module implements technical concerns
+* **Dependency direction** flows inward: outer layers depend on inner layers only
+* **Domain** (planned/future) will be the pure core with zero framework dependencies
+
+This approach balances architectural purity with pragmatic Spring Boot development patterns.
+
+=== Dependency Direction Rule
+
+[mermaid]
+----
+graph TD
+    Bootstrap[Bootstrap: skeleton-api-app, skeleton-worker-app]
+    CommonWeb[Common-Web: Filters, Interceptors, ExceptionHandler]
+    App[Application: todo-application]
+    Infra[Infrastructure: DB, Cache, HTTP Client]
+    Domain[Domain: Business Rules - PLANNED/FUTURE]
+    Common[Common: Utils, Exceptions, Codes]
+
+    Bootstrap --> CommonWeb
+    Bootstrap --> App
+    Bootstrap --> Infra
+    CommonWeb --> Common
+    App --> Infra
+    App --> Domain
+    Infra --> Common
+    Domain --> Common
+
+    style Domain fill:#f9f9f9,stroke:#999,stroke-dasharray: 5 5
+    style Common fill:#e1f5fe
+    style Infra fill:#fff3e0
+    style App fill:#e8f5e9
+    style CommonWeb fill:#f3e5f5
+    style Bootstrap fill:#ffebee
+----
+
+**Key Rules:**
+
+* Upper layers may depend on lower layers
+* Lower layers must NOT depend on upper layers
+* `common` is the foundation - no dependencies on other modules
+* `-app` modules are composition roots - they orchestrate all other modules
+
+== Technology Stack
+
+=== Core Technologies
+
+[cols="1,1,3"]
+|===
+|Technology |Version |Purpose
+
+|Spring Boot
+|4.0.2
+|Application framework with latest Spring Framework 6.3
+
+|Kotlin
+|2.3.0
+|Primary programming language
+
+|Gradle
+|9.x
+|Build tool with version catalog (libs.versions.toml)
+
+|JDK
+|21
+|Runtime with Virtual Thread support
+|===
+
+=== Dependency Management
+
+==== Spring BOM-Managed Libraries
+
+Spring Boot's BOM manages versions for:
+
+* Spring Framework core, web, data, cache
+* Jackson (JSON serialization)
+* Hibernate & JPA
+* Micrometer (metrics)
+* Lombok
+* Database drivers (H2, MySQL)
+* Test frameworks (JUnit, Mockito)
+
+**Rule**: Do NOT specify versions for Spring-managed dependencies.
+
+==== Explicitly Versioned Libraries
+
+Third-party libraries not in Spring BOM:
+
+[cols="1,1,2"]
+|===
+|Library |Version |Purpose
+
+|Kotest
+|6.0.7
+|Kotlin-native testing framework
+
+|Redisson
+|4.1.0
+|Redis client with distributed lock support
+
+|libphonenumber
+|9.0.22
+|Phone number validation/formatting
+
+|Slack API
+|1.46.0
+|Slack integration
+
+|Apache POI
+|5.5.1
+|Excel file generation
+
+|QueryDSL
+|7.1
+|Type-safe queries (Jakarta namespace)
+
+|SpringDoc OpenAPI
+|3.0.1
+|OpenAPI 3.0 documentation
+|===
+
+See `gradle/libs.versions.toml` for complete list.
+
+=== Key Libraries
+
+==== Caffeine (L1 Cache)
+
+Local in-memory cache with configurable eviction policies:
+
+* Maximum 200 entries per cache
+* 30-minute default TTL
+* Per-request cache for duplicate query elimination
+
+==== Redisson (L2 Cache + Distributed Lock)
+
+Redis client with Spring integration:
+
+* Two-tier caching (Caffeine → Redis)
+* Distributed lock support (`@RedisLock`)
+* LZ4 compression for large values
+* Async operations with MDC context propagation
+
+==== Kotest
+
+Kotlin-native testing framework:
+
+* Fluent assertions (`shouldBe`, `shouldContain`)
+* Property-based testing
+* Data-driven tests
+* Spring integration
+
+==== Micrometer
+
+Observability platform:
+
+* Metrics collection (Prometheus-compatible)
+* Distributed tracing (Brave/Zipkin)
+* OpenTelemetry bridge available
+
+== Architecture Principles
+
+=== Module Isolation
+
+Each module has clear responsibilities:
+
+[cols="1,3"]
+|===
+|Module Type |Responsibility
+
+|`common`
+|Foundation utilities, exceptions, codes - zero Spring dependencies
+
+|`common-web`
+|Web infrastructure (filters, interceptors, exception handlers)
+
+|`infrastructure`
+|Technical implementations (DB, cache, HTTP clients)
+
+|`application`
+|Business logic orchestration, use cases
+
+|`domain` (planned)
+|Pure business rules, domain models - zero framework dependencies
+
+|`bootstrap`
+|Spring Boot entry points, dependency wiring
+|===
+
+=== Module Naming Convention
+
+**`-app` Suffix Drives Build Behavior:**
+
+The build system uses module naming to determine behavior:
+
+[source,kotlin]
+----
+// build.gradle.kts
+configure(subprojects.filter { it.name.endsWith("-app") }) {
+    apply(plugin = "org.springframework.boot")
+
+    tasks.named<BootJar>("bootJar") { enabled = true }
+    tasks.named<Jar>("jar") { enabled = false }
+}
+----
+
+**Rules:**
+
+* Modules ending with `-app` → bootJar enabled, plain jar disabled
+* All other modules → bootJar disabled, plain jar enabled
+* Only `-app` modules can be executed with `bootRun`
+
+**Examples:**
+
+* `skeleton-api-app` → Spring Boot application (executable)
+* `todo-application` → Library module (dependency)
+
+=== Component Scanning Boundaries
+
+Each `-app` module defines its own component scanning base package:
+
+[source,kotlin]
+----
+@SpringBootApplication(
+    scanBasePackages = [
+        "com.myrealtrip.skeletonapi",
+        "com.myrealtrip.commonweb",
+        "com.myrealtrip.infrastructure"
+    ]
+)
+class SkeletonApiApplication
+----
+
+**Benefits:**
+
+* Explicit control over which packages are scanned
+* Prevents accidental bean registration from unrelated modules
+* Faster startup time
+
+=== Profile-Based Configuration Composition
+
+Bootstrap modules use `spring.profiles.include` to compose configurations:
+
+[source,yaml]
+----
+spring:
+  profiles:
+    include: common-web, infrastructure
+----
+
+This allows:
+
+* `common-web` profile → activates web infrastructure beans
+* `infrastructure` profile → activates cache, Redis, database beans
+* Each module provides its own `application-{profile}.yml`
+
+**Example structure:**
+
+----
+modules/common-web/src/main/resources/application-common-web.yml
+modules/infrastructure/src/main/resources/application-infrastructure.yml
+modules/bootstrap/skeleton-api-app/src/main/resources/application.yml (includes both)
+----
+
+== High-Level Architecture Diagram
+
+[mermaid]
+----
+graph TB
+    subgraph BOOTSTRAP ["BOOTSTRAP (Input Adapters)"]
+        API[skeleton-api-app<br/>REST Controllers]
+        Worker[skeleton-worker-app<br/>Scheduled Jobs]
+    end
+
+    subgraph COMMON_WEB ["COMMON-WEB (Web Infrastructure)"]
+        Filters[Filters: AppTrace, ContentCaching]
+        Interceptors[Interceptors: Logging]
+        Handler[ExceptionHandler: Global]
+        ApiResource[Response: ApiResource]
+    end
+
+    subgraph APPLICATION ["APPLICATION (Use Cases)"]
+        TodoApp[todo-application<br/>TodoClient, TodoService]
+        AppN[future applications...]
+    end
+
+    subgraph INFRASTRUCTURE ["INFRASTRUCTURE (Output Adapters)"]
+        Cache[Cache: Caffeine + Redis]
+        HTTP[HTTP: RestClient]
+        DB[DB: JPA + QueryDSL]
+        Export[Export: Excel/CSV]
+    end
+
+    subgraph DOMAIN ["DOMAIN (Core - PLANNED/FUTURE)"]
+        DomainModel[Domain Models]
+        BizRules[Business Rules]
+    end
+
+    subgraph COMMON ["COMMON (Foundation)"]
+        Utils[Utils: DateTime, Cipher, Coroutine]
+        Exceptions[Exceptions: Known, Biz]
+        Codes[Codes: Error, Success]
+        Extensions[Extensions: String, DateTime]
+    end
+
+    API --> COMMON_WEB
+    Worker --> COMMON_WEB
+    API --> APPLICATION
+    COMMON_WEB --> COMMON
+    APPLICATION --> INFRASTRUCTURE
+    APPLICATION -.-> DOMAIN
+    INFRASTRUCTURE --> COMMON
+    DOMAIN -.-> COMMON
+
+    style DOMAIN fill:#f9f9f9,stroke:#999,stroke-dasharray: 5 5
+    style COMMON fill:#e1f5fe
+    style INFRASTRUCTURE fill:#fff3e0
+    style APPLICATION fill:#e8f5e9
+    style COMMON_WEB fill:#f3e5f5
+    style BOOTSTRAP fill:#ffebee
+----
+
+**Module Count:** 6 active + 1 planned
+
+**Active modules:**
+
+1. `common` - Foundation (zero dependencies)
+2. `common-web` - Web infrastructure (depends on common)
+3. `infrastructure` - Technical implementations (depends on common)
+4. `application/todo-application` - Business logic (depends on infrastructure, common)
+5. `bootstrap/skeleton-api-app` - REST API entry point
+6. `bootstrap/skeleton-worker-app` - Background job entry point
+
+**Planned module:**
+
+7. `domain` - Pure business rules (commented out in settings.gradle.kts)
+
+== Key Architectural Decisions Summary
+
+[cols="1,2,1"]
+|===
+|Topic |Decision |Document
+
+|Module Structure
+|Layered multi-module with dependency inversion
+|xref:01-module-structure.adoc[01-module-structure]
+
+|HTTP Client Strategy
+|Declarative @HttpExchange with RestClient
+|xref:02-http-client.adoc[02-http-client]
+
+|Caching Strategy
+|Two-tier (Caffeine L1 + Redis L2) with per-request cache
+|xref:03-caching.adoc[03-caching]
+
+|Exception Handling
+|Three-tier (Known, Biz, Unexpected) with global handler
+|xref:04-exception-handling.adoc[04-exception-handling]
+
+|Response Format
+|ApiResource wrapper with status/meta/data structure
+|xref:05-response-format.adoc[05-response-format]
+
+|Testing Strategy
+|Kotest + AssertJ with given-when-then pattern
+|xref:06-testing.adoc[06-testing]
+
+|Observability
+|Micrometer + Brave for metrics/tracing, UUID v7 trace IDs
+|xref:07-observability.adoc[07-observability]
+
+|Async & Concurrency
+|Virtual Threads (JDK 21) with MDC propagation
+|xref:08-async-concurrency.adoc[08-async-concurrency]
+|===
+
+== Document Index
+
+This architecture documentation consists of the following documents:
+
+[cols="1,2,3"]
+|===
+|Document |Title |Description
+
+|xref:00-overview.adoc[00-overview]
+|Architecture Overview (this document)
+|High-level design philosophy, technology stack, and key decisions
+
+|xref:01-module-structure.adoc[01-module-structure]
+|Module Structure & Dependencies
+|Detailed module responsibilities, dependency rules, and package conventions
+
+|xref:02-http-client.adoc[02-http-client]
+|HTTP Client Strategy
+|Declarative @HttpExchange usage, configuration, logging, and error handling
+
+|xref:03-caching.adoc[03-caching]
+|Caching Strategy
+|Two-tier cache architecture, configuration, and usage patterns
+
+|xref:04-exception-handling.adoc[04-exception-handling]
+|Exception Handling
+|Exception hierarchy, global handler, and error response format
+
+|xref:05-response-format.adoc[05-response-format]
+|API Response Format
+|ApiResource structure, status codes, pagination, and conventions
+
+|xref:06-testing.adoc[06-testing]
+|Testing Strategy
+|Testing patterns, Kotest usage, test organization, and best practices
+
+|xref:07-observability.adoc[07-observability]
+|Observability & Monitoring
+|Metrics, tracing, logging, and operational insights
+
+|xref:08-async-concurrency.adoc[08-async-concurrency]
+|Async & Concurrency
+|Virtual Threads, coroutines, MDC propagation, and distributed locks
+|===
+
+== Getting Started
+
+=== Prerequisites
+
+* JDK 21 or later
+* Gradle 9.x (wrapper included)
+* Docker & Docker Compose (for Redis)
+
+=== Build
+
+[source,bash]
+----
+./gradlew build
+----
+
+=== Run API Server
+
+[source,bash]
+----
+./gradlew :modules:bootstrap:skeleton-api-app:bootRun
+----
+
+Default URL: http://localhost:8080
+
+=== Run Worker Server
+
+[source,bash]
+----
+./gradlew :modules:bootstrap:skeleton-worker-app:bootRun
+----
+
+=== Run Tests
+
+[source,bash]
+----
+./gradlew test
+
+# Generate aggregated test report
+./gradlew testReport
+----
+
+== Creating New Modules
+
+=== Application Module Template
+
+[source]
+----
+modules/application/my-application/
+├── build.gradle.kts
+└── src/main/kotlin/com/myrealtrip/myapplication/
+    ├── client/
+    │   ├── MyClient.kt           # @HttpExchange interface
+    │   ├── MyClientConfig.kt     # Client configuration
+    │   └── dto/
+    │       └── MyDto.kt
+    └── service/
+        ├── MyService.kt          # Application service
+        └── MyDomain.kt           # Domain model
+----
+
+**build.gradle.kts:**
+
+[source,kotlin]
+----
+dependencies {
+    implementation(project(":modules:infrastructure"))
+    // Add other dependencies as needed
+}
+----
+
+=== Bootstrap Module Template
+
+[source]
+----
+modules/bootstrap/my-api-app/
+├── build.gradle.kts
+└── src/main/kotlin/com/myrealtrip/myapiapp/
+    ├── api/
+    │   └── MyController.kt
+    ├── config/
+    │   └── AppConfig.kt
+    └── MyApiApplication.kt
+----
+
+**build.gradle.kts:**
+
+[source,kotlin]
+----
+dependencies {
+    implementation(project(":modules:common-web"))
+    implementation(project(":modules:infrastructure"))
+    implementation(project(":modules:application:my-application"))
+}
+----
+
+**Important**: The module name MUST end with `-app` to enable bootJar.
+
+=== Register Module
+
+Add to `settings.gradle.kts`:
+
+[source,kotlin]
+----
+include(
+    // ... existing modules ...
+    "modules:application:my-application",
+    "modules:bootstrap:my-api-app"
+)
+----
+
+== Future Considerations
+
+=== Domain Module Activation
+
+The `domain` module is currently commented out in `settings.gradle.kts`. To activate:
+
+1. Uncomment in `settings.gradle.kts`
+2. Create pure domain models (zero Spring dependencies)
+3. Update application modules to depend on domain
+4. Move business rules from application services to domain
+
+**Why not active now:**
+
+* Skeleton project targets simple to medium complexity services
+* Domain layer adds value when business logic complexity warrants it
+* Can be added incrementally when needed
+
+=== Event-Driven Architecture
+
+Consider adding event publishing/subscribing when:
+
+* Multiple modules need to react to state changes
+* Loose coupling between modules is required
+* Audit trail or event sourcing is needed
+
+**Potential implementation:**
+
+* Spring Events (in-process)
+* Kafka/RabbitMQ (cross-service)
+* Redis Streams (lightweight distributed events)
+
+=== Multi-Database Support
+
+Current setup uses single database with JPA. For multi-database scenarios:
+
+* Split infrastructure into database-specific modules
+* Use `@Primary` and `@Qualifier` for DataSource disambiguation
+* Consider database per bounded context (DDD pattern)
+
+== References
+
+* link:../../readme.adoc[Project README]
+* link:../../gradle/version-releases.adoc[Library Version Releases]
+* link:../../modules/common/README.adoc[Common Module Documentation]
+* link:../../modules/infrastructure/README.adoc[Infrastructure Module Documentation]
+* Spring Boot Reference: https://docs.spring.io/spring-boot/reference/
+* Hexagonal Architecture (reference): https://alistair.cockburn.us/hexagonal-architecture/
