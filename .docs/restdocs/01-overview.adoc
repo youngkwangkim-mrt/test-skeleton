@@ -1,0 +1,271 @@
+= REST Docs 개요
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== 소개
+
+REST Docs는 Spring REST Docs를 기반으로 API 테스트와 문서화를 통합하는 도구입니다. 프로젝트는 다음과 같은 특징을 제공합니다:
+
+* **Type-safe Field DSL**: 필드 타입을 안전하게 정의하는 DSL
+* **Field 빌더**: 필드 설명, 포맷, 예시, 옵션 여부 등을 체계적으로 정의
+* **공통 응답 필드**: ApiResource 래퍼의 표준 필드 자동 처리
+* **Subsection 전략**: 복잡한 응답을 논리적으로 분리하여 문서화
+* **자동 포맷 적용**: DATE, DATETIME, ENUM 타입에 자동 포맷 적용
+* **자동 HTML 생성**: Gradle 빌드 시 AsciiDoc → HTML 자동 변환
+
+=== 핵심 이점
+
+1. **테스트 기반 문서화**: API 테스트가 곧 문서화 소스
+2. **항상 최신 상태**: 코드 변경 시 테스트를 업데이트하면 문서도 자동 갱신
+3. **타입 안전성**: 컴파일 타임에 필드 정의 오류 감지
+4. **일관된 API 응답**: ApiResource 표준 형식 강제
+5. **자동화된 빌드**: `./gradlew :modules:docs:docs` 한 번으로 테스트 → 스니펫 → HTML 생성
+
+== 디렉토리 구조
+
+프로젝트의 REST Docs 관련 파일 구조는 다음과 같습니다:
+
+[source,text]
+----
+modules/
+├── test-support/
+│   └── src/testFixtures/kotlin/com/myrealtrip/testsupport/restdocs/
+│       ├── RestDocsSupport.kt                    # 기본 클래스
+│       ├── Field.kt                              # Field 빌더
+│       ├── DocsFieldType.kt                      # 필드 타입 정의
+│       ├── CustomResponseFieldsSnippet.kt        # 커스텀 스니펫
+│       ├── DocumentFormatGenerator.kt            # 포맷 유틸
+│       └── common/
+│           ├── CommonResponseController.kt       # 테스트용 컨트롤러
+│           ├── CommonResponseDocsTest.kt         # 공통 응답 테스트
+│           └── CommonCodeDocsTest.kt             # 코드 테스트
+│
+├── docs/                                          # API 문서 모듈
+│   ├── build.gradle.kts                          # Asciidoctor 설정
+│   └── src/docs/asciidoc/
+│       ├── index.adoc                            # 문서 홈 (메인)
+│       ├── .templates/                           # 공통 템플릿
+│       │   ├── template-api-req-res.adoc
+│       │   ├── template-page-format.adoc
+│       │   └── template-no-offset-page-format.adoc
+│       └── {app-name}/                           # 앱별 API 문서
+│           └── {domain}/
+│               └── {domain}-{type}-v1.adoc
+│
+├── bootstrap/
+│   ├── common-api-app/
+│   │   └── src/test/kotlin/.../docs/
+│   │       └── HolidayControllerDocsTest.kt      # 실제 사용 예시
+│   └── skeleton-api-app/
+│       └── src/test/kotlin/.../docs/
+│
+└── 생성된 문서/
+    └── modules/docs/build/
+        ├── generated-snippets/                    # 복사된 스니펫
+        │   └── {test-class-name}/
+        │       ├── response-fields.adoc
+        │       ├── response-fields-data.adoc
+        │       └── ...
+        └── docs/                                  # 생성된 HTML
+            ├── index.html
+            └── {app-name}/{domain}/*.html
+----
+
+== 핵심 컴포넌트
+
+=== RestDocsSupport
+
+모든 REST Docs 테스트는 `RestDocsSupport`를 상속합니다. 이 클래스는 MockMvc 설정과 공통 필드 정의를 제공합니다.
+
+==== 기본 구조
+
+[source,kotlin]
+----
+@ExtendWith(RestDocumentationExtension::class)
+abstract class RestDocsSupport {
+    protected val jsonMapper: JsonMapper = JsonMapper.builder().build()
+    protected val restDocs: RestDocumentationResultHandler = createRestDocumentationResultHandler()
+    protected lateinit var mockMvc: MockMvc
+
+    /**
+     * 테스트할 컨트롤러 인스턴스 반환
+     * 의존성은 모두 모킹되어야 함
+     */
+    protected abstract fun initController(): Any
+
+    @BeforeEach
+    fun setUpMockMvc(provider: RestDocumentationContextProvider) {
+        // MockMvc 설정 (자동)
+    }
+}
+----
+
+==== 제공 메서드
+
+[cols="2,3,4", options="header"]
+|===
+| 메서드 | 반환 타입 | 설명
+
+| `resourceCommonFormat()`
+| `List<FieldDescriptor>`
+| status, meta, data(object) 필드
+
+| `resourceArrayCommonFormat()`
+| `List<FieldDescriptor>`
+| status, meta, data(array) 필드
+
+| `resourceStringCommonFormat()`
+| `List<FieldDescriptor>`
+| status, meta, data(string) 필드
+
+| `statusCommonFormat()`
+| `List<FieldDescriptor>`
+| status 객체의 내부 필드
+
+| `metaCommonFormat()`
+| `List<FieldDescriptor>`
+| meta 객체의 내부 필드
+
+| `responseCommonFields()`
+| `Array<FieldDescriptor>`
+| 객체 응답용 공통 필드 (접두사 포함)
+
+| `responseArrayCommonFields()`
+| `Array<FieldDescriptor>`
+| 배열 응답용 공통 필드 (접두사 포함)
+
+| `responseStringCommonFields()`
+| `Array<FieldDescriptor>`
+| 문자열 응답용 공통 필드 (접두사 포함)
+
+| `responseCommonFieldsSubsection()`
+| `Array<FieldDescriptor>`
+| Subsection 전략용 공통 필드
+
+| `responseArrayCommonFieldsSubsection()`
+| `Array<FieldDescriptor>`
+| Subsection 전략용 배열 공통 필드
+
+| `dataResponseFields(...)`
+| `ResponseFieldsSnippet`
+| 데이터 필드 subsection 생성
+|===
+
+=== DocsFieldType (필드 타입)
+
+`DocsFieldType`은 sealed class로 필드의 데이터 타입을 안전하게 정의합니다.
+
+[source,kotlin]
+----
+sealed class DocsFieldType(val type: JsonFieldType) {
+    data object ARRAY : DocsFieldType(JsonFieldType.ARRAY)
+    data object BOOLEAN : DocsFieldType(JsonFieldType.BOOLEAN)
+    data object NUMBER : DocsFieldType(JsonFieldType.NUMBER)
+    data object OBJECT : DocsFieldType(JsonFieldType.OBJECT)
+    data object STRING : DocsFieldType(JsonFieldType.STRING)
+    data object NULL : DocsFieldType(JsonFieldType.NULL)
+    data object VARIES : DocsFieldType(JsonFieldType.VARIES)
+    data object DATE : DocsFieldType(JsonFieldType.STRING)      // 자동 포맷 적용
+    data object DATETIME : DocsFieldType(JsonFieldType.STRING)  // 자동 포맷 적용
+
+    // ENUM: 열거형 값을 자동으로 포맷합니다
+    class ENUM<T : Enum<T>>(
+        val enums: Collection<T>,
+    ) : DocsFieldType(JsonFieldType.STRING) {
+        constructor(clazz: KClass<T>) : this(clazz.java.enumConstants.toList())
+    }
+}
+----
+
+==== 자동 포맷 적용
+
+각 타입별로 자동으로 포맷이 적용됩니다:
+
+[cols="1,2,3", options="header"]
+|===
+| 타입 | 포맷 | 예시
+
+| `DATE`
+| `yyyy-MM-dd`
+| `2026-02-06`
+
+| `DATETIME`
+| `yyyy-MM-dd'T'HH:mm:ss`
+| `2026-02-06T14:30:00`
+
+| `ENUM`
+| 열거형 값 나열
+| `` `ACTIVE` / `INACTIVE` ``
+|===
+
+=== Field (필드 빌더)
+
+`Field` 클래스는 infix 함수를 활용한 유연한 빌더 패턴을 제공합니다.
+
+==== 프로퍼티
+
+[cols="1,1,3", options="header"]
+|===
+| 프로퍼티 | 타입 | 설명
+
+| `format`
+| `String`
+| 필드의 포맷 정보 (예: 날짜 형식)
+
+| `sample`
+| `String`
+| 필드의 샘플 값
+
+| `default`
+| `String`
+| 필드의 기본값
+|===
+
+==== Infix 함수
+
+[cols="1,2,3", options="header"]
+|===
+| 함수 | 파라미터 | 설명
+
+| `type`
+| `DocsFieldType`
+| 필드 타입 설정 (접두사: 생략)
+
+| `means`
+| `String`
+| 필드 설명 설정
+
+| `isOptional`
+| `Boolean`
+| 필드 선택 여부 설정
+
+| `example`
+| `String`
+| 샘플 값 설정
+
+| `formattedAs`
+| `String`
+| 포맷 정보 설정
+
+| `withDefaultValue`
+| `String`
+| 기본값 설정
+
+| `isIgnored`
+| `Boolean`
+| 문서에서 무시 설정
+
+| `attributes`
+| `Field.() -> Unit`
+| 블록 내에서 프로퍼티 설정
+|===
+
+== 다음 단계
+
+* xref:02-writing-tests.adoc[DocsTest 작성 방법] - 테스트 작성 단계별 가이드
+* xref:03-examples.adoc[예시 및 AsciiDoc] - 실제 코드 분석
+* xref:04-reference.adoc[참고 자료] - Best Practices, 트러블슈팅

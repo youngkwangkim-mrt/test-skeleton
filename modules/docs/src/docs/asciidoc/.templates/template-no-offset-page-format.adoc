@@ -1,0 +1,2 @@
+.No Offset Page Fields
+include::{snippets}/common-response-docs-test/common no offset page format/response-fields-data.no-offset.adoc[]

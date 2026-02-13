@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+\.[0-9]+\.[0-9]+'
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Extract Version
+        id: version
+        run: echo "milestone=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Generate Changelog
+        id: changelog
+        uses: spring-io/github-changelog-generator@v0.0.12
+        continue-on-error: true
+        with:
+          config-file: '.github/changelog-generator.yml'
+          milestone: ${{ steps.version.outputs.milestone }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Previous Tag
+        id: prev_tag
+        env:
+          CURRENT_TAG: ${{ github.ref_name }}
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -Fxv "${CURRENT_TAG}" | head -1)
+          echo "tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Build Release Notes
+        env:
+          REPO: ${{ github.repository }}
+          CURRENT_TAG: ${{ github.ref_name }}
+          PREV_TAG: ${{ steps.prev_tag.outputs.tag }}
+        run: |
+          # changelog generator가 생성한 파일이 있으면 백업
+          if [ -s changelog.md ]; then
+            cp changelog.md changelog_generated.md
+          fi
+
+          # 기존 파일 삭제 후 새로 생성 (권한 문제 방지)
+          rm -f changelog.md
+
+          # 생성된 changelog가 있으면 사용, 없으면 기본 내용 생성
+          if [ -s changelog_generated.md ]; then
+            cp changelog_generated.md changelog.md
+          else
+            echo "# Release ${CURRENT_TAG}" > changelog.md
+            echo "" >> changelog.md
+          fi
+
+          # Full Changelog 링크 추가
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> changelog.md
+            echo "**Full Changelog**: https://github.com/${REPO}/compare/${PREV_TAG}...${CURRENT_TAG}" >> changelog.md
+          fi
+
+          # 임시 파일 정리
+          rm -f changelog_generated.md
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create ${{ github.ref_name }} --notes-file changelog.md

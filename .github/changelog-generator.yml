@@ -1,0 +1,31 @@
+changelog:
+  sections:
+    - title: "⚠️ Noteworthy Changes"
+      labels:
+        - "for: team-attention"
+        - "type: blocker"
+    - title: "⭐ New Features"
+      labels:
+        - "type: feature"
+        - "type: enhancement"
+    - title: "🐞 Bug Fixes"
+      labels:
+        - "type: bug"
+    - title: "🔨 Dependency Upgrades"
+      labels:
+        - "type: dependency-upgrade"
+    - title: "🔧 Improvements"
+      labels:
+        - "theme: datasource"
+        - "theme: error-handling"
+        - "theme: modularization"
+        - "theme: observability"
+        - "theme: performance"
+        - "theme: testing"
+    - title: "📔 Documentation"
+      labels:
+        - "type: documentation"
+  issues:
+    excludeLabels:
+      - "type: task"
+    sort: "title"

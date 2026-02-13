@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: skeleton-api-app
+    version: @projectVersion@
+
+  profiles:
+    default: local
+    group:
+      embed: embed, local
+    include: common-web, infrastructure
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  threads:
+    virtual:
+      enabled: false
+
+  task:
+    scheduling:
+      pool:
+        size: 10
+
+# server
+server:
+  tomcat:
+    accept-count: 500
+    max-connections: 10000
+
+
+# =====================================================================================================================
+# local
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+logging:
+  level:
+    app: trace
+    sql: debug
+    query: debug
+    bind: trace
+    hikari: debug
+  
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %clr(%5.5p) [%15.15t] [%clr(%-32.32X{traceId:-}){magenta},%clr(%-16.16X{spanId:-})] --- %clr(%-40.40logger{39}){cyan} : %m%n%throwable"
+
+
+# =====================================================================================================================
+# prod
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+#
+logging:
+  level:
+    app: info
+    sql: info
+    query: info
+    bind: info
+    hikari: info
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        app-name: skeleton-api-app
+        app-version: @projectVersion@

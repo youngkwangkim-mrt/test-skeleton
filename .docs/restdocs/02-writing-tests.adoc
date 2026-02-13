@@ -1,0 +1,462 @@
+= DocsTest 작성 가이드
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== DocsTest 작성 방법
+
+===  Step 1: 테스트 클래스 생성
+
+모든 DocsTest는 `RestDocsSupport`를 상속합니다.
+
+[source,kotlin]
+----
+import com.myrealtrip.testsupport.restdocs.RestDocsSupport
+import com.myrealtrip.testsupport.restdocs.DocsFieldType.*
+import org.junit.jupiter.api.Test
+
+class MyControllerDocsTest : RestDocsSupport() {
+
+    private val myFacade: MyFacade = mock()
+
+    override fun initController(): Any = MyController(myFacade)
+
+    @Test
+    fun `should document my endpoint`(): Unit {
+        // 테스트 코드 작성
+    }
+}
+----
+
+=== Step 2: 모의 데이터 설정 (Given)
+
+[source,kotlin]
+----
+@Test
+fun `get holidays by year`(): Unit {
+    // given - 서비스 동작 설정
+    val holidays = listOf(
+        HolidayDto(1L, LocalDate.of(2026, 2, 16), "설날"),
+        HolidayDto(2L, LocalDate.of(2026, 2, 17), "설날"),
+    )
+    val page = PageImpl(holidays, PageRequest.of(0, 20), holidays.size.toLong())
+    given(holidayFacade.findPageByYear(any(), any())).willReturn(page)
+
+    // 이어서 when/then 작성...
+}
+----
+
+=== Step 3: 요청 수행 (When)
+
+[source,kotlin]
+----
+// when & then
+mockMvc.perform(
+    get("/api/holidays/{year}", 2026)
+        .param("page", "0")
+        .param("size", "20")
+)
+    .andExpect(status().isOk)
+    .andDo(
+        restDocs.document(
+            // 문서화 내용 작성
+        )
+    )
+----
+
+=== Step 4: 경로 파라미터 문서화
+
+[source,kotlin]
+----
+import org.springframework.restdocs.request.RequestDocumentation.pathParameters
+import org.springframework.restdocs.request.RequestDocumentation.parameterWithName
+
+mockMvc.perform(
+    get("/api/holidays/{year}", 2026)
+        .param("page", "0")
+        .param("size", "20")
+)
+    .andExpect(status().isOk)
+    .andDo(
+        restDocs.document(
+            pathParameters(
+                parameterWithName("year").description("조회할 연도"),
+            ),
+            queryParameters(
+                *pageRequestFormat().toTypedArray(),
+            ),
+            // ...
+        )
+    )
+----
+
+=== Step 5: 요청 필드 문서화
+
+[source,kotlin]
+----
+import org.springframework.restdocs.payload.PayloadDocumentation.requestFields
+import com.myrealtrip.testsupport.restdocs.fields
+
+mockMvc.perform(
+    post("/api/holidays")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(request)
+)
+    .andExpect(status().isOk)
+    .andDo(
+        restDocs.document(
+            requestFields(
+                *fields(
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                )
+            ),
+            // ...
+        )
+    )
+----
+
+=== Step 6: 응답 필드 문서화
+
+단순한 응답(모든 필드를 한 곳에 문서화)인 경우:
+
+[source,kotlin]
+----
+import org.springframework.restdocs.payload.PayloadDocumentation.responseFields
+import com.myrealtrip.testsupport.restdocs.RestDocsSupport.Companion.responseCommonFields
+
+mockMvc.perform(delete("/api/holidays/{id}", 1L))
+    .andExpect(status().isOk)
+    .andDo(
+        restDocs.document(
+            pathParameters(
+                parameterWithName("id").description("삭제할 공휴일 ID"),
+            ),
+            responseFields(*responseStringCommonFields()),
+        )
+    )
+----
+
+== Field DSL 사용법
+
+=== 기본 패턴
+
+가장 단순한 필드 정의:
+
+[source,kotlin]
+----
+"data.id" type NUMBER means "사용자 ID"
+"data.name" type STRING means "사용자 이름"
+"data.createdAt" type DATETIME means "생성 일시"
+----
+
+=== 선택적 필드 표시
+
+[source,kotlin]
+----
+"data.nickname" type STRING means "별명" isOptional true
+"data.phone" type STRING means "전화번호" isOptional true
+----
+
+=== 샘플 값 추가
+
+[source,kotlin]
+----
+"data.email" type STRING means "이메일" example "user@example.com"
+"data.age" type NUMBER means "나이" example "25"
+----
+
+=== 기본값 설정
+
+[source,kotlin]
+----
+"data.status" type STRING means "상태" example "ACTIVE" withDefaultValue "PENDING"
+"data.role" type STRING means "역할" example "USER" withDefaultValue "USER"
+----
+
+=== 날짜/시간 타입 (자동 포맷)
+
+[source,kotlin]
+----
+// DATE - 자동으로 yyyy-MM-dd 포맷 적용
+"data.birthday" type DATE means "생년월일"
+
+// DATETIME - 자동으로 yyyy-MM-dd'T'HH:mm:ss 포맷 적용
+"data.createdAt" type DATETIME means "생성 일시"
+----
+
+=== 열거형 타입 (자동 포맷)
+
+[source,kotlin]
+----
+// ENUM - 열거형 값을 자동으로 나열
+"data.status" type ENUM(Status::class) means "주문 상태"
+// 출력: `PENDING` / `PROCESSING` / `COMPLETED` / `CANCELLED`
+
+// 특정 값만 포함
+"data.priority" type ENUM(listOf(Priority.HIGH, Priority.MEDIUM)) means "우선순위"
+----
+
+=== 배열 필드
+
+[source,kotlin]
+----
+"data.tags" type ARRAY means "태그 목록"
+"data.items[].id" type NUMBER means "항목 ID"
+"data.items[].name" type STRING means "항목 이름"
+----
+
+=== 객체 필드
+
+[source,kotlin]
+----
+"data.user" type OBJECT means "사용자 정보"
+"data.user.id" type NUMBER means "사용자 ID"
+"data.user.name" type STRING means "사용자 이름"
+----
+
+=== 복합 설정
+
+[source,kotlin]
+----
+"data.discount" type NUMBER means "할인 금액"
+    example "10000"
+    withDefaultValue "0"
+    isOptional true
+
+// 또는 attributes 블록 사용
+"data.status" type STRING means "상태" attributes {
+    sample = "ACTIVE"
+    default = "PENDING"
+    format = "ACTIVE / PENDING / INACTIVE"
+}
+----
+
+== 공통 응답 패턴
+
+=== 전략 1: responseCommonFields() - 전체 필드 한 곳에 문서화
+
+가장 간단하고 직관적인 방식입니다. 모든 필드를 responseFields에서 함께 정의합니다.
+
+==== 사용 시나리오
+
+* 응답 필드가 많지 않은 경우
+* 구조가 단순한 경우
+* 빠르게 문서화해야 하는 경우
+
+==== 객체 응답 예시
+
+[source,kotlin]
+----
+@Test
+fun `get user`(): Unit {
+    // given
+    val user = User(1L, "홍길동", "hong@example.com")
+    given(userService.findById(1L)).willReturn(user)
+
+    // when & then
+    mockMvc.perform(get("/api/users/{id}", 1L))
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("id").description("사용자 ID"),
+                ),
+                responseFields(
+                    *responseCommonFields(),    // status, meta, data 공통 필드
+                    *fields(
+                        "data.id" type NUMBER means "사용자 ID",
+                        "data.name" type STRING means "사용자 이름",
+                        "data.email" type STRING means "이메일",
+                    )
+                )
+            )
+        )
+}
+----
+
+생성된 문서: 단일 `response-fields.adoc` 파일
+
+==== 배열 응답 예시
+
+[source,kotlin]
+----
+@Test
+fun `get holidays by year`(): Unit {
+    // given
+    val holidays = listOf(
+        Holiday(1L, LocalDate.of(2026, 2, 16), "설날"),
+        Holiday(2L, LocalDate.of(2026, 2, 17), "설날"),
+    )
+    given(holidayService.findByYear(2026)).willReturn(holidays)
+
+    // when & then
+    mockMvc.perform(get("/api/holidays/{year}", 2026))
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("year").description("조회할 연도"),
+                ),
+                responseFields(
+                    *responseArrayCommonFields(),  // status, meta, data(array) 공통 필드
+                    *fields(
+                        "data[].id" type NUMBER means "공휴일 ID",
+                        "data[].date" type DATE means "공휴일 날짜",
+                        "data[].name" type STRING means "공휴일 이름",
+                    )
+                )
+            )
+        )
+}
+----
+
+=== 전략 2: Subsection - 복잡한 응답을 논리적으로 분리
+
+복잡한 응답을 여러 문서로 나누는 방식입니다. `response-fields.adoc`과 `response-fields-data.adoc`으로 분리됩니다.
+
+==== 사용 시나리오
+
+* 응답 필드가 매우 많은 경우
+* 중첩된 객체가 많은 경우
+* API 문서를 읽기 쉽게 정리하고 싶은 경우
+* 데이터 필드와 메타정보를 명확히 분리하고 싶은 경우
+
+==== 객체 응답 예시
+
+[source,kotlin]
+----
+@Test
+fun `create holiday`(): Unit {
+    // given
+    val holiday = Holiday(1L, LocalDate.of(2026, 1, 1), "신정")
+    given(holidayService.create(any())).willReturn(holiday)
+
+    val request = """
+        {
+            "holidayDate": "2026-01-01",
+            "name": "신정"
+        }
+    """.trimIndent()
+
+    // when & then
+    mockMvc.perform(
+        post("/api/holidays")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(request)
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                requestFields(
+                    *fields(
+                        "holidayDate" type DATE means "공휴일 날짜",
+                        "name" type STRING means "공휴일 이름",
+                    )
+                ),
+                responseFields(*responseCommonFieldsSubsection()),  // status, meta만 포함
+                dataResponseFields(  // data 필드는 별도 문서화
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                )
+            )
+        )
+}
+----
+
+생성된 문서:
+* `response-fields.adoc` - status, meta 필드만 포함
+* `response-fields-data.adoc` - data 내부 필드 포함
+
+==== 배열 응답 예시
+
+[source,kotlin]
+----
+@Test
+fun `create holidays bulk`(): Unit {
+    // given
+    val holidays = listOf(
+        Holiday(1L, LocalDate.of(2026, 2, 16), "설날"),
+        Holiday(2L, LocalDate.of(2026, 2, 17), "설날"),
+    )
+    given(holidayService.createAll(any())).willReturn(holidays)
+
+    val request = """
+        {
+            "holidays": [
+                { "holidayDate": "2026-02-16", "name": "설날" },
+                { "holidayDate": "2026-02-17", "name": "설날" }
+            ]
+        }
+    """.trimIndent()
+
+    // when & then
+    mockMvc.perform(
+        post("/api/holidays/bulk")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(request)
+    )
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                requestFields(
+                    *fields(
+                        "holidays" type ARRAY means "생성할 공휴일 목록",
+                        "holidays[].holidayDate" type DATE means "공휴일 날짜",
+                        "holidays[].name" type STRING means "공휴일 이름",
+                    )
+                ),
+                responseFields(*responseArrayCommonFieldsSubsection()),  // status, meta[]만 포함
+                dataResponseFields(  // data[] 필드는 별도 문서화
+                    "id" type NUMBER means "공휴일 ID",
+                    "holidayDate" type DATE means "공휴일 날짜",
+                    "name" type STRING means "공휴일 이름",
+                )
+            )
+        )
+}
+----
+
+=== 삭제/빈 응답 처리
+
+DELETE 또는 void 작업의 경우 `responseStringCommonFields()`를 사용합니다.
+
+[source,kotlin]
+----
+@Test
+fun `delete holiday`(): Unit {
+    // given
+    doNothing().`when`(holidayService).delete(any())
+
+    // when & then
+    mockMvc.perform(delete("/api/holidays/{id}", 1L))
+        .andExpect(status().isOk)
+        .andDo(
+            restDocs.document(
+                pathParameters(
+                    parameterWithName("id").description("삭제할 공휴일 ID"),
+                ),
+                responseFields(*responseStringCommonFields()),  // status, meta, data(string)
+            )
+        )
+}
+----
+
+응답 구조:
+[source,json]
+----
+{
+  "status": { "status": 200, "code": "SUCCESS", "message": "..." },
+  "meta": { "x-b3-traceid": "...", "appTraceId": "...", "responseTs": ... },
+  "data": "SUCCESS"
+}
+----
+
+== 다음 단계
+
+* xref:03-examples.adoc[예시 및 AsciiDoc] - HolidayControllerDocsTest 분석
+* xref:04-reference.adoc[참고 자료] - Best Practices, 트러블슈팅

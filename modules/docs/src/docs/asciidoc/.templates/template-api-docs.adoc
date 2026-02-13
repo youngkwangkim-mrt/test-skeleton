@@ -1,0 +1,228 @@
+// ============================================================================
+// API 문서 템플릿
+// ============================================================================
+// 사용법:
+//   1. 이 파일을 복사하여 {app-name}/{domain}/{domain}-{type}-v1.adoc 로 저장
+//   2. {API_NAME}, {api_description} 등 플레이스홀더를 실제 값으로 변경
+//   3. {test-class-name}, {test-method-name} 을 실제 테스트 이름으로 변경
+//   4. 필요 없는 API 섹션은 삭제
+// ============================================================================
+
+= {API_NAME} API
+{API_NAME} API 연동 가이드
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 2
+:table-stripes: hover
+:sectanchors:
+:sectnums:
+:sectnumlevels: 2
+
+
+= Overview
+
+.본 문서는 {API_NAME} API를 연동하기 위한 문서입니다.
+[NOTE]
+--
+- {api_description_1}
+- {api_description_2}
+--
+
+[[api-req-res]]
+include::../../.templates/template-api-req-res.adoc[]
+
+= APIs
+
+// ============================================================================
+// 조회 API 예시 (GET)
+// ============================================================================
+== 조회
+
+[[get-list]]
+=== 목록 조회
+
+[NOTE]
+--
+- {api_description}
+--
+
+==== Http Request
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-request.adoc[]
+
+// Path Parameters (필요한 경우)
+.Path Parameters
+include::{snippets}/{test-class-name}/{test-method-name}/path-parameters.adoc[]
+
+// Query Parameters (필요한 경우)
+// .Query Parameters
+// include::{snippets}/{test-class-name}/{test-method-name}/query-parameters.adoc[]
+
+==== Http Response
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/{test-class-name}/{test-method-name}/response-fields-data.adoc[]
+
+'''
+
+// ============================================================================
+// 단건 조회 API 예시 (GET with ID)
+// ============================================================================
+
+[[get-detail]]
+=== 상세 조회
+
+[NOTE]
+--
+- {api_description}
+--
+
+==== Http Request
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-request.adoc[]
+
+.Path Parameters
+include::{snippets}/{test-class-name}/{test-method-name}/path-parameters.adoc[]
+
+==== Http Response
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/{test-class-name}/{test-method-name}/response-fields-data.adoc[]
+
+'''
+
+// ============================================================================
+// 등록 API 예시 (POST)
+// ============================================================================
+
+== 등록
+
+[[create]]
+=== 단건 등록
+
+[NOTE]
+--
+- {api_description}
+--
+
+==== Http Request
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-request.adoc[]
+
+.Request Fields
+include::{snippets}/{test-class-name}/{test-method-name}/request-fields.adoc[]
+
+==== Http Response
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/{test-class-name}/{test-method-name}/response-fields-data.adoc[]
+
+'''
+
+[[create-bulk]]
+=== 대량 등록
+
+[NOTE]
+--
+- {api_description}
+--
+
+==== Http Request
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-request.adoc[]
+
+.Request Fields
+include::{snippets}/{test-class-name}/{test-method-name}/request-fields.adoc[]
+
+==== Http Response
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/{test-class-name}/{test-method-name}/response-fields-data.adoc[]
+
+'''
+
+// ============================================================================
+// 수정 API 예시 (PUT/PATCH)
+// ============================================================================
+
+== 수정
+
+[[update]]
+=== 수정
+
+[NOTE]
+--
+- {api_description}
+--
+
+==== Http Request
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-request.adoc[]
+
+.Path Parameters
+include::{snippets}/{test-class-name}/{test-method-name}/path-parameters.adoc[]
+
+.Request Fields
+include::{snippets}/{test-class-name}/{test-method-name}/request-fields.adoc[]
+
+==== Http Response
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-response.adoc[]
+
+.Response Fields `data`
+include::{snippets}/{test-class-name}/{test-method-name}/response-fields-data.adoc[]
+
+'''
+
+// ============================================================================
+// 삭제 API 예시 (DELETE)
+// ============================================================================
+
+== 삭제
+
+[[delete]]
+=== 삭제
+
+[NOTE]
+--
+- {api_description}
+--
+
+==== Http Request
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-request.adoc[]
+
+.Path Parameters
+include::{snippets}/{test-class-name}/{test-method-name}/path-parameters.adoc[]
+
+==== Http Response
+
+include::{snippets}/{test-class-name}/{test-method-name}/http-response.adoc[]
+
+// ============================================================================
+// 플레이스홀더 설명
+// ============================================================================
+// {API_NAME}          : API 이름 (예: Holiday, User, Order)
+// {api_description}   : API 설명
+// {test-class-name}   : DocsTest 클래스명 kebab-case (예: holiday-controller-docs-test)
+// {test-method-name}  : 테스트 메서드명 (예: get holidays by year, create holiday)
+//
+// 스니펫 종류:
+//   - http-request.adoc       : HTTP 요청 예시
+//   - http-response.adoc      : HTTP 응답 예시
+//   - path-parameters.adoc    : Path 파라미터 설명
+//   - query-parameters.adoc   : Query 파라미터 설명
+//   - request-fields.adoc     : Request Body 필드 설명
+//   - response-fields.adoc    : Response 전체 필드 설명
+//   - response-fields-data.adoc : Response data 필드 설명 (Subsection)
+// ============================================================================
