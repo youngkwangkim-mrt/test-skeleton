@@ -10,20 +10,20 @@ spring:
 slack:
   enabled: true
   bot-token: ${SLACK_BOT_TOKEN}
-  default-channel: "#general"
+  default-channel: "C08PNPZSVAM"
   retry:
     max-attempts: 3
     backoff-ms: 1000
     max-backoff-ms: 10000
 
 # =====================================================================================================================
-# local, dev
+# embed, local (H2 In-Memory)
 # =====================================================================================================================
 ---
 spring:
   config:
     activate:
-      on-profile: embed,local,dev,dev01,dev02
+      on-profile: embed,local
   #
   docker:
     compose:
@@ -31,7 +31,7 @@ spring:
       file: modules/infrastructure/docker-compose.yml
       #      lifecycle-management: start_and_stop
       lifecycle-management: start_only
-  #    
+  #
   redis:
     redisson:
       file: classpath:redisson-dev.yml
@@ -42,7 +42,7 @@ spring:
     password:
     driver-class-name: org.h2.Driver
     hikari:
-      pool-name: "${spring.application.name}-dev-cp"
+      pool-name: "${spring.application.name}-local-cp"
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 600000
@@ -62,4 +62,166 @@ spring:
         jdbc:
           batch_size: 500
           generate-ddl: false
+    open-in-view: false
+
+# =====================================================================================================================
+# dev
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: dev,dev01,dev02
+  #
+  redis:
+    redisson:
+      file: classpath:redisson-dev.yml
+  #
+  datasource:
+    master:
+      hikari:
+        jdbc-url: ${DB_MASTER_URL}
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        pool-name: "${spring.application.name}-master-cp"
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 3000
+        idle-timeout: 300000
+        max-lifetime: 840000
+        validation-timeout: 1000
+    slave:
+      hikari:
+        jdbc-url: ${DB_SLAVE_URL}
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        pool-name: "${spring.application.name}-slave-cp"
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 3000
+        idle-timeout: 300000
+        max-lifetime: 840000
+        validation-timeout: 1000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+        default_batch_fetch_size: 500
+        order_updates: true
+        order_inserts: true
+        jdbc:
+          batch_size: 500
+    open-in-view: false
+
+# =====================================================================================================================
+# test
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: test,test01,test02
+  #
+  redis:
+    redisson:
+      file: classpath:redisson-test.yml
+  #
+  datasource:
+    master:
+      hikari:
+        jdbc-url: ${DB_MASTER_URL}
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        pool-name: "${spring.application.name}-master-cp"
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 3000
+        idle-timeout: 300000
+        max-lifetime: 840000
+        validation-timeout: 1000
+    slave:
+      hikari:
+        jdbc-url: ${DB_SLAVE_URL}
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        pool-name: "${spring.application.name}-slave-cp"
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 3000
+        idle-timeout: 300000
+        max-lifetime: 840000
+        validation-timeout: 1000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+        default_batch_fetch_size: 500
+        order_updates: true
+        order_inserts: true
+        jdbc:
+          batch_size: 500
+    open-in-view: false
+
+# =====================================================================================================================
+# stage, prod
+# =====================================================================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: stage,prod
+  #
+  redis:
+    redisson:
+      file: classpath:redisson-prod.yml
+  #
+  datasource:
+    master:
+      hikari:
+        jdbc-url: ${DB_MASTER_URL}
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        pool-name: "${spring.application.name}-master-cp"
+        maximum-pool-size: 20
+        minimum-idle: 5
+        connection-timeout: 3000
+        idle-timeout: 300000
+        max-lifetime: 840000
+        validation-timeout: 1000
+    slave:
+      hikari:
+        jdbc-url: ${DB_SLAVE_URL}
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        pool-name: "${spring.application.name}-slave-cp"
+        maximum-pool-size: 30
+        minimum-idle: 10
+        connection-timeout: 3000
+        idle-timeout: 300000
+        max-lifetime: 840000
+        validation-timeout: 1000
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+        default_batch_fetch_size: 500
+        order_updates: true
+        order_inserts: true
+        jdbc:
+          batch_size: 500
     open-in-view: false

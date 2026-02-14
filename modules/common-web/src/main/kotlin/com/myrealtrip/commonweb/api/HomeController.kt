@@ -1,6 +1,6 @@
 package com.myrealtrip.commonweb.api
 
-import com.myrealtrip.common.utils.extensions.kst
+import com.myrealtrip.common.utils.extensions.toKst
 import com.myrealtrip.commonweb.utils.EnvironmentUtil
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
@@ -22,7 +22,7 @@ class HomeController(
 
     @RequestMapping(method = [RequestMethod.GET, RequestMethod.POST])
     fun home() =
-        "application name = $name , version = $version , profile = ${environmentUtil.activeProfile()}, now = ${LocalDateTime.now().kst()}"
+        "application name = $name , version = $version , profile = ${environmentUtil.activeProfile()}, now = ${LocalDateTime.now().toKst()}"
 
     init {
         logger.info { "# ==> ${this.javaClass.simpleName} initialized" }

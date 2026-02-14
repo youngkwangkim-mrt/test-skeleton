@@ -1,19 +1,20 @@
 ---
 name: Kotlin
 description: Kotlin coding conventions, idioms, null safety, and best practices
+last-verified: 2026-02-14
 ---
 
-# Kotlin Style & Best Practices
+# Kotlin style & best practices
 
 ## Overview
 
-A pragmatic guide for writing clean, readable, and maintainable Kotlin code.
+This guide provides pragmatic rules for writing clean, readable, and maintainable Kotlin code.
 
-> **Core Philosophy**: Simple is best. Write code that humans can understand. Don't over-engineer.
+> **Key Principle**: Simple is best. Write code that humans can understand. Do not over-engineer.
 
 Based on [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html).
 
-## Naming Conventions
+## Naming conventions
 
 Follow [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html).
 
@@ -25,7 +26,7 @@ package org.example.project
 package com.company.feature.domain
 ```
 
-### Classes & Interfaces
+### Classes & interfaces
 
 ```kotlin
 // UpperCamelCase
@@ -34,7 +35,7 @@ class OrderProcessingService
 interface PaymentGateway
 ```
 
-### Functions & Variables
+### Functions & variables
 
 ```kotlin
 // lowerCamelCase
@@ -57,7 +58,7 @@ companion object {
 }
 ```
 
-### Backing Properties
+### Backing properties
 
 ```kotlin
 private val _items = mutableListOf<Item>()
@@ -75,9 +76,9 @@ class XmlParser
 class HttpClient
 ```
 
-## Code Organization
+## Code organization
 
-### Class Layout Order
+### Class layout order
 
 Follow this order for consistent, readable classes:
 
@@ -117,7 +118,7 @@ class UserService(
 }
 ```
 
-### Group Related Members
+### Group related members
 
 ```kotlin
 class OrderService(
@@ -141,7 +142,7 @@ class OrderService(
 }
 ```
 
-### Visibility Order Within Groups
+### Visibility order within groups
 
 ```kotlin
 class PaymentProcessor {
@@ -159,7 +160,7 @@ class PaymentProcessor {
 }
 ```
 
-### Property Organization
+### Property organization
 
 ```kotlin
 class UserViewModel(
@@ -182,7 +183,7 @@ class UserViewModel(
 }
 ```
 
-### Companion Object Placement
+### Companion object placement
 
 ```kotlin
 class ApiClient {
@@ -201,7 +202,7 @@ class ApiClient {
 }
 ```
 
-### Keep Classes Focused
+### Keep classes focused
 
 ```kotlin
 // Bad: mixed responsibilities
@@ -232,7 +233,7 @@ class UserReportService {
 }
 ```
 
-### Data Class Layout
+### Data class layout
 
 ```kotlin
 data class User(
@@ -263,7 +264,7 @@ data class User(
 }
 ```
 
-### Sealed Class Layout
+### Sealed class layout
 
 ```kotlin
 sealed class Result<out T> {
@@ -290,7 +291,7 @@ sealed class Result<out T> {
 }
 ```
 
-### Interface Implementation Order
+### Interface implementation order
 
 ```kotlin
 class UserRepositoryImpl(
@@ -313,7 +314,7 @@ class UserRepositoryImpl(
 }
 ```
 
-### File Naming
+### File naming
 
 ```kotlin
 // Single class: match class name
@@ -326,7 +327,7 @@ OrderValidations.kt
 
 ## Formatting
 
-### Indentation & Braces
+### Indentation & braces
 
 ```kotlin
 // 4 spaces, opening brace at end of line
@@ -337,7 +338,7 @@ if (user != null) {
 }
 ```
 
-### Function Signatures
+### Function signatures
 
 ```kotlin
 // Short: single line
@@ -354,7 +355,7 @@ fun createOrder(
 }
 ```
 
-### Chained Calls
+### Chained calls
 
 ```kotlin
 val result = users
@@ -363,7 +364,7 @@ val result = users
     .sortedBy { it.name }
 ```
 
-### Trailing Commas
+### Trailing commas
 
 ```kotlin
 // Use trailing commas for cleaner diffs
@@ -374,9 +375,9 @@ data class User(
 )
 ```
 
-## Clean Code Principles
+## Clean code principles
 
-### Write Self-Documenting Code
+### Write self-documenting code
 
 ```kotlin
 // Bad
@@ -390,7 +391,7 @@ fun calculateTotalWithTax(price: Int, quantity: Int): Double {
 }
 ```
 
-### Keep Functions Small & Focused
+### Keep functions small & focused
 
 ```kotlin
 // Bad: doing too much
@@ -411,7 +412,7 @@ fun processOrder(order: Order): ProcessedOrder {
 }
 ```
 
-### Avoid Deep Nesting
+### Avoid deep nesting
 
 ```kotlin
 // Bad
@@ -435,7 +436,7 @@ fun processUser(user: User?) {
 }
 ```
 
-### Comments: Explain Why, Not What
+### Comments: explain why, not what
 
 ```kotlin
 // Bad: explains what (obvious)
@@ -447,11 +448,11 @@ counter++
 retryCount = 0
 ```
 
-## OOP & SOLID (Pragmatically)
+## OOP & SOLID (pragmatically)
 
-> Apply when they add value. Don't create abstractions for hypothetical future needs.
+> Apply when they add value. Do not create abstractions for hypothetical future needs.
 
-### Single Responsibility
+### Single responsibility
 
 ```kotlin
 // Good: focused class
@@ -464,7 +465,7 @@ fun calculateOrderPrice(order: Order): Money =
     order.items.sumOf { it.price * it.quantity }
 ```
 
-### Dependency Injection
+### Dependency injection
 
 ```kotlin
 // Good: injectable dependencies
@@ -479,22 +480,22 @@ class SimpleService(
 )
 ```
 
-### When NOT to Over-Engineer
+### When NOT to over-engineer
 
 ```kotlin
 // Bad: interface for single implementation
 interface UserRepository { }
 class UserRepositoryImpl : UserRepository { }
 
-// Good: just use the class
+// Good: use the class directly
 class UserRepository { }
 
 // Rule: Wait for 2-3 real use cases before abstracting
 ```
 
-## Functional Programming (Balanced)
+## Functional programming (balanced)
 
-### Prefer Immutability
+### Prefer immutability
 
 ```kotlin
 val users = listOf(user1, user2)  // immutable
@@ -504,7 +505,7 @@ fun getActiveUsers(): List<User>  // returns immutable
 private val _cache = mutableMapOf<Long, User>()
 ```
 
-### Collection Operations
+### Collection operations
 
 ```kotlin
 // Good: readable chain
@@ -514,7 +515,7 @@ val activeAdminEmails = users
     .map { it.email }
 ```
 
-### Sequences for Large Collections
+### Sequences for large collections
 
 ```kotlin
 // Use sequences for large collections with multiple operations
@@ -525,7 +526,7 @@ val result = hugeList.asSequence()
     .toList()
 ```
 
-### Avoid Over-Functional Code
+### Avoid over-functional code
 
 ```kotlin
 // Bad: too clever
@@ -542,9 +543,9 @@ val topByCategory = grouped.mapValues { (_, items) ->
 }
 ```
 
-## Kotlin Idioms
+## Kotlin idioms
 
-### Null Safety
+### Null safety
 
 ```kotlin
 val length = name?.length ?: 0
@@ -553,7 +554,7 @@ user?.let { saveToDatabase(it) }
 requireNotNull(user) { "User cannot be null" }
 ```
 
-### Data Classes
+### Data classes
 
 ```kotlin
 data class User(
@@ -565,48 +566,48 @@ data class User(
 val updated = user.copy(name = "New Name")
 ```
 
-### Value Objects (from common module)
+### Value objects (from common module)
 
-> **IMPORTANT**: 원시 타입 대신 `com.myrealtrip.common.values` 패키지의 값 객체를 사용하세요.
+> **IMPORTANT**: Use Value Objects from the `com.myrealtrip.common.values` package instead of primitive types.
 
 ```kotlin
-// Bad: 원시 타입 사용
+// Bad: primitive types
 data class User(
-    val email: String,      // 유효성 미검증
-    val phone: String,      // 형식 불일치
-    val balance: BigDecimal // 통화 정보 없음
+    val email: String,      // No validation
+    val phone: String,      // Inconsistent format
+    val balance: BigDecimal // No currency info
 )
 
-// Good: 값 객체 사용
+// Good: Value Objects
 import com.myrealtrip.common.values.Email
 import com.myrealtrip.common.values.PhoneNumber
 import com.myrealtrip.common.values.Money
 
 data class User(
-    val email: Email,       // 유효성 검증, 마스킹
-    val phone: PhoneNumber, // 자동 파싱/포맷팅
-    val balance: Money      // 통화 포함, 타입 안전 연산
+    val email: Email,       // Validated, masking support
+    val phone: PhoneNumber, // Auto-parsing/formatting
+    val balance: Money      // Currency included, type-safe operations
 )
 
-// 생성
+// Creation
 val email = "user@example.com".asEmail
 val phone = "010-1234-5678".asPhoneNumber
 val money = 10000L.krw
 val rate = 15.percent
 ```
 
-**사용 가능한 값 객체:**
+**Available value objects:**
 
-| 타입 | 용도 | 예시 |
-|------|------|------|
-| `Email` | 이메일 | `Email.of("a@b.com")`, `"a@b.com".asEmail` |
-| `PhoneNumber` | 전화번호 | `PhoneNumber.of("010-1234-5678")` |
-| `Money` | 금액 | `Money.krw(10000)`, `10000L.krw` |
-| `Rate` | 비율/퍼센트 | `Rate.ofPercent(15)`, `15.percent` |
+| Type | Purpose | Example |
+|------|---------|---------|
+| `Email` | Email address | `Email.of("a@b.com")`, `"a@b.com".asEmail` |
+| `PhoneNumber` | Phone number | `PhoneNumber.of("010-1234-5678")` |
+| `Money` | Monetary amount | `Money.krw(10000)`, `10000L.krw` |
+| `Rate` | Ratio/Percentage | `Rate.ofPercent(15)`, `15.percent` |
 
-> 자세한 사용법: `modules/common/README.adoc` 또는 `.claude/rules/20_common-module.md` 참조
+> **Note**: See `modules/common/README.adoc` or `.claude/rules/50_common-module.md` for detailed usage.
 
-### Sealed Classes
+### Sealed classes
 
 ```kotlin
 sealed class Result<out T> {
@@ -622,7 +623,7 @@ fun handle(result: Result<User>) = when (result) {
 }
 ```
 
-### Extension Functions
+### Extension functions
 
 ```kotlin
 fun String.toSlug() = lowercase().replace(" ", "-")
@@ -631,7 +632,7 @@ fun User.isEligibleForDiscount() =
     accountAge > Duration.ofDays(365) && totalPurchases > 1000
 ```
 
-### Scope Functions
+### Scope functions
 
 ```kotlin
 // let: null checks
@@ -647,7 +648,7 @@ val user = User().apply {
 return user.also { logger.info("Created: ${it.id}") }
 ```
 
-### Default & Named Arguments
+### Default & named arguments
 
 ```kotlin
 fun createUser(
@@ -664,11 +665,11 @@ createUser(
 )
 ```
 
-## Error Handling
+## Error handling
 
-> **IMPORTANT**: 예외 처리 시 `com.myrealtrip.common.exceptions` 패키지의 예외 클래스를 사용하세요.
+> **IMPORTANT**: Use exception classes from the `com.myrealtrip.common.exceptions` package for error handling.
 
-### Nullable for Expected Absence
+### Nullable for expected absence
 
 ```kotlin
 fun findUser(id: Long): User? = userRepository.findById(id)
@@ -681,23 +682,23 @@ import com.myrealtrip.common.exceptions.KnownException
 import com.myrealtrip.common.exceptions.BizRuntimeException
 import com.myrealtrip.common.codes.response.ErrorCode
 
-// 예상된 에러 (validation, not found) - 스택 트레이스 없음
+// Expected error (validation, not found) - no stack trace
 class UserNotFoundException(id: Long) : KnownException(
     ErrorCode.DATA_NOT_FOUND,
     "User not found: $id"
 )
 
-// 비즈니스 에러 - 스택 트레이스 포함
+// Business error - includes stack trace
 throw BizRuntimeException(ErrorCode.ILLEGAL_STATE, "Invalid state")
 ```
 
-### Precondition 검증 (from common module)
+### Precondition validation (from common module)
 
 ```kotlin
 import com.myrealtrip.common.utils.knownRequired
 import com.myrealtrip.common.utils.knownRequiredNotNull
 
-// require 대신 knownRequired 사용 (KnownException 발생)
+// Use knownRequired instead of require (throws KnownException)
 knownRequired(amount > 0) { "Amount must be positive" }
 
 val user = knownRequiredNotNull(repository.findById(id)) {
@@ -705,7 +706,7 @@ val user = knownRequiredNotNull(repository.findById(id)) {
 }
 ```
 
-### Result Pattern for Expected Failures
+### Result pattern for expected failures
 
 ```kotlin
 sealed class Result<out T> {
@@ -724,7 +725,7 @@ fun processPayment(payment: Payment): Result<Receipt> {
 
 ## Testing
 
-### Descriptive Names
+### Descriptive names
 
 ```kotlin
 @Test
@@ -734,7 +735,7 @@ fun `should return empty list when no users match criteria`() { }
 fun `should throw exception when user id is negative`() { }
 ```
 
-### Arrange-Act-Assert
+### Arrange-act-assert
 
 ```kotlin
 @Test
@@ -750,9 +751,9 @@ fun `should calculate correct total with discount`() {
 }
 ```
 
-## Anti-Patterns to Avoid
+## Anti-patterns to avoid
 
-### Over-Engineering
+### Over-engineering
 
 ```kotlin
 // Bad
@@ -764,7 +765,7 @@ class ProcessorFactory { fun create(): StringProcessor = ... }
 fun toUpperCase(s: String) = s.uppercase()
 ```
 
-### God Classes
+### God classes
 
 ```kotlin
 // Bad: class does everything
@@ -781,7 +782,7 @@ class EmailService { }
 class ReportGenerator { }
 ```
 
-### Copy-Paste Code
+### Copy-paste code
 
 ```kotlin
 // Bad: duplicated validation
@@ -807,4 +808,4 @@ fun HasContactInfo.validateContactInfo() {
 | Abstract when needed | Abstract preemptively |
 | Name things clearly | Use abbreviations |
 
-> **Remember**: Code is read more often than written. Optimize for readability.
+> **Note**: Code is read more often than written. Optimize for readability.

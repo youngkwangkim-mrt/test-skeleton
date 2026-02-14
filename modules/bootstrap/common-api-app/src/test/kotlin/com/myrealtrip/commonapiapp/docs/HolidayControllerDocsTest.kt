@@ -68,7 +68,7 @@ class HolidayControllerDocsTest : RestDocsSupport() {
             .andDo(
                 restDocs.document(
                     pathParameters(
-                        parameterWithName("year").description("조회할 연도"),
+                        parameterWithName("year").description("조회할 연도 (1900~2100)"),
                     ),
                     queryParameters(
                         *pageRequestFormat().toTypedArray(),
@@ -111,8 +111,8 @@ class HolidayControllerDocsTest : RestDocsSupport() {
             .andDo(
                 restDocs.document(
                     pathParameters(
-                        parameterWithName("year").description("조회할 연도"),
-                        parameterWithName("month").description("조회할 월"),
+                        parameterWithName("year").description("조회할 연도 (1900~2100)"),
+                        parameterWithName("month").description("조회할 월 (1~12)"),
                     ),
                     queryParameters(
                         *pageRequestFormat().toTypedArray(),
@@ -151,9 +151,9 @@ class HolidayControllerDocsTest : RestDocsSupport() {
             .andDo(
                 restDocs.document(
                     pathParameters(
-                        parameterWithName("year").description("조회할 연도"),
-                        parameterWithName("month").description("조회할 월"),
-                        parameterWithName("day").description("조회할 일"),
+                        parameterWithName("year").description("조회할 연도 (1900~2100)"),
+                        parameterWithName("month").description("조회할 월 (1~12)"),
+                        parameterWithName("day").description("조회할 일 (1~31)"),
                     ),
                     responseFields(*responseCommonFieldsSubsection()),
                     dataResponseFields(
@@ -189,8 +189,8 @@ class HolidayControllerDocsTest : RestDocsSupport() {
                 restDocs.document(
                     requestFields(
                         *fields(
-                            "holidayDate" type DATE means "공휴일 날짜",
-                            "name" type STRING means "공휴일 이름",
+                            "holidayDate" type DATE means "공휴일 날짜 (필수)",
+                            "name" type STRING means "공휴일 이름 (필수, 최대 100자)",
                         )
                     ),
                     responseFields(*responseCommonFieldsSubsection()),
@@ -232,9 +232,9 @@ class HolidayControllerDocsTest : RestDocsSupport() {
                 restDocs.document(
                     requestFields(
                         *fields(
-                            "holidays" type ARRAY means "생성할 공휴일 목록",
-                            "holidays[].holidayDate" type DATE means "공휴일 날짜",
-                            "holidays[].name" type STRING means "공휴일 이름",
+                            "holidays" type ARRAY means "생성할 공휴일 목록 (필수, 1개 이상)",
+                            "holidays[].holidayDate" type DATE means "공휴일 날짜 (필수)",
+                            "holidays[].name" type STRING means "공휴일 이름 (필수, 최대 100자)",
                         )
                     ),
                     responseFields(*responseArrayCommonFieldsSubsection()),
@@ -274,8 +274,8 @@ class HolidayControllerDocsTest : RestDocsSupport() {
                     ),
                     requestFields(
                         *fields(
-                            "holidayDate" type DATE means "공휴일 날짜",
-                            "name" type STRING means "공휴일 이름",
+                            "holidayDate" type DATE means "공휴일 날짜 (필수)",
+                            "name" type STRING means "공휴일 이름 (필수, 최대 100자)",
                         )
                     ),
                     responseFields(*responseCommonFieldsSubsection()),

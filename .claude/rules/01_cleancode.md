@@ -1,57 +1,60 @@
 ---
 name: Clean Code
 description: Clean code principles (KISS, DRY, YAGNI) for Java, Kotlin, and Spring applications
+last-verified: 2026-02-14
 ---
 
-# Clean Code Rules for Claude Code
+# Clean code rules
 
 ## Overview
 
-These rules ensure Claude Code generates clean, maintainable, and human-readable code following industry best practices for Java, Kotlin, and Spring applications.
+This document provides rules for generating clean, maintainable, and human-readable code following industry best practices for Java, Kotlin, and Spring applications.
 
-## Core Principles
+> **Key Principle**: Write the simplest code that works, make it human-readable, and don't over-engineer.
 
-### KISS (Keep It Simple, Stupid)
+## Core principles
 
-* Write the simplest solution that works
-* Avoid premature optimization
-* Do not add features "just in case"
-* If a simpler solution exists, use it
+### KISS (Keep it simple, stupid)
 
-### DRY (Don't Repeat Yourself)
+* Write the simplest solution that works.
+* Avoid premature optimization.
+* Do not add features "just in case".
+* If a simpler solution exists, use it.
 
-* Extract repeated logic into reusable functions or classes
-* Use inheritance or composition to share behavior
-* Create utility classes for common operations
-* Avoid copy-paste coding
+### DRY (Don't repeat yourself)
 
-### YAGNI (You Aren't Gonna Need It)
+* Extract repeated logic into reusable functions or classes.
+* Use inheritance or composition to share behavior.
+* Create utility classes for common operations.
+* Avoid copy-paste coding.
 
-* Only implement what is currently required
-* Do not build abstractions for hypothetical future needs
-* Remove unused code immediately
+### YAGNI (You aren't gonna need it)
 
-## Human-Readable Code
+* Implement only what is currently required.
+* Do not build abstractions for hypothetical future needs.
+* Remove unused code immediately.
 
-### Meaningful Names
+## Human-readable code
+
+### Meaningful names
 
 ```kotlin
-// BAD
+// Bad
 val d: Int = 0  // elapsed time in days
 fun calc(a: Int, b: Int): Int
 
-// GOOD
+// Good
 val elapsedTimeInDays: Int = 0
 fun calculateTotalPrice(quantity: Int, unitPrice: Int): Int
 ```
 
-* Variable names should reveal intent
-* Function names should describe what they do (use verbs)
-* Class names should be nouns that describe their responsibility
-* Avoid abbreviations unless they are universally understood (e.g., `id`, `url`)
-* Boolean variables should read like questions: `isValid`, `hasPermission`, `canExecute`
+* Variable names must reveal intent.
+* Function names must describe what they do (use verbs).
+* Class names must be nouns that describe their responsibility.
+* Avoid abbreviations unless universally understood (e.g., `id`, `url`).
+* Boolean variables must read like questions: `isValid`, `hasPermission`, `canExecute`.
 
-### Consistent Naming Conventions
+### Consistent naming conventions
 
 | Type | Convention | Example |
 |------|------------|---------|
@@ -61,14 +64,14 @@ fun calculateTotalPrice(quantity: Int, unitPrice: Int): Int
 | Constants | SCREAMING_SNAKE_CASE | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT` |
 | Packages | lowercase | `com.myrealtrip.common.utils` |
 
-## Abstraction Levels
+## Abstraction levels
 
-### Keep Consistent Abstraction Level
+### Keep consistent abstraction level
 
-Each function should operate at a single level of abstraction:
+Each function must operate at a single level of abstraction:
 
 ```kotlin
-// BAD - mixed abstraction levels
+// Bad - mixed abstraction levels
 fun processOrder(order: Order) {
     // High level
     validateOrder(order)
@@ -83,7 +86,7 @@ fun processOrder(order: Order) {
     sendConfirmationEmail(order)
 }
 
-// GOOD - consistent abstraction level
+// Good - consistent abstraction level
 fun processOrder(order: Order) {
     validateOrder(order)
     saveOrder(order)
@@ -91,21 +94,21 @@ fun processOrder(order: Order) {
 }
 ```
 
-### Function Size
+### Function size
 
-* Functions should do ONE thing
-* Ideal function length: 5-20 lines
-* If a function needs a comment to explain what a section does, extract that section
+* Functions must do ONE thing.
+* Ideal function length: 5-20 lines.
+* If a function needs a comment to explain what a section does, extract that section.
 
-### Class Cohesion
+### Class cohesion
 
-* Classes should have a single responsibility
-* All methods should relate to the class's core purpose
-* If a class grows too large, split it into smaller focused classes
+* Classes must have a single responsibility.
+* All methods must relate to the class's core purpose.
+* If a class grows too large, split it into smaller focused classes.
 
-## Java/Kotlin Best Practices
+## Java/Kotlin best practices
 
-### Prefer Immutability
+### Prefer immutability
 
 ```kotlin
 // Prefer val over var
@@ -122,7 +125,7 @@ data class UserDto(
 )
 ```
 
-### Null Safety (Kotlin)
+### Null safety (Kotlin)
 
 ```kotlin
 // Use nullable types explicitly
@@ -134,7 +137,7 @@ val userName = user?.name ?: "Unknown"
 // Avoid !! operator unless absolutely necessary
 ```
 
-### Use Kotlin Idioms
+### Use Kotlin idioms
 
 ```kotlin
 // Use scope functions appropriately
@@ -151,19 +154,19 @@ val result = when (status) {
 }
 ```
 
-## Spring Best Practices
+## Spring best practices
 
-### Constructor Injection
+### Constructor injection
 
 ```kotlin
-// GOOD - constructor injection (testable, immutable)
+// Good - constructor injection (testable, immutable)
 @Service
 class UserService(
     private val userRepository: UserRepository,
     private val emailService: EmailService
 )
 
-// BAD - field injection (harder to test)
+// Bad - field injection (harder to test)
 @Service
 class UserService {
     @Autowired
@@ -171,14 +174,14 @@ class UserService {
 }
 ```
 
-### Layer Separation
+### Layer separation
 
-* Controller: HTTP handling only, delegate to services
-* Service: Business logic, transaction management
-* Repository: Data access only
-* Do not leak implementation details between layers
+* Controller: HTTP handling only, delegate to services.
+* Service: Business logic, transaction management.
+* Repository: Data access only.
+* Do not leak implementation details between layers.
 
-### Exception Handling
+### Exception handling
 
 ```kotlin
 // Use custom exceptions for business errors
@@ -190,30 +193,30 @@ class UserNotFoundException(userId: Long) :
 fun handleBizException(ex: BizRuntimeException): ResponseEntity<ErrorResponse>
 ```
 
-## Do Not Overengineer
+## Do not overengineer
 
 ### Avoid
 
-* Creating interfaces for classes that will only have one implementation
-* Building complex abstractions for simple problems
-* Adding configuration options that nobody will use
-* Creating utility classes for one-off operations
-* Premature generalization
+* Creating interfaces for classes that have only one implementation.
+* Building complex abstractions for simple problems.
+* Adding configuration options that nobody uses.
+* Creating utility classes for one-off operations.
+* Premature generalization.
 
-### Signs of Overengineering
+### Signs of overengineering
 
-* More than 3 levels of inheritance
-* Classes with only one method
-* Excessive use of design patterns
-* Configuration for everything
-* "Flexible" code that is never flexed
+* More than 3 levels of inheritance.
+* Classes with only one method.
+* Excessive use of design patterns.
+* Configuration for everything.
+* "Flexible" code that is never flexed.
 
-## Testable Code
+## Testable code
 
-### Design for Testability
+### Design for testability
 
 ```kotlin
-// GOOD - dependencies injected, easy to mock
+// Good - dependencies injected, easy to mock
 class OrderService(
     private val orderRepository: OrderRepository,
     private val paymentGateway: PaymentGateway,
@@ -225,7 +228,7 @@ class OrderService(
     }
 }
 
-// BAD - hard-coded dependencies, impossible to test
+// Bad - hard-coded dependencies, impossible to test
 class OrderService {
     fun createOrder(request: OrderRequest): Order {
         val repo = OrderRepositoryImpl()  // Can't mock
@@ -235,57 +238,57 @@ class OrderService {
 }
 ```
 
-### Pure Functions
+### Pure functions
 
-* Prefer functions without side effects
-* Same input should always produce same output
-* Makes testing trivial
+* Prefer functions without side effects.
+* Same input must always produce same output.
+* Pure functions make testing trivial.
 
-### Small, Focused Units
+### Small, focused units
 
-* Small classes and functions are easier to test
-* Single responsibility = single test focus
+* Small classes and functions are easier to test.
+* Single responsibility equals single test focus.
 
-## Code Organization
+## Code organization
 
-### File Structure
+### File structure
 
-* One public class per file
-* Related classes can be in the same file if small
-* Group by feature, not by type
+* One public class per file.
+* Related classes can be in the same file if small.
+* Group by feature, not by type.
 
-### Import Organization
+### Import organization
 
-* Remove unused imports
-* Avoid wildcard imports
-* Group imports logically
+* Remove unused imports.
+* Avoid wildcard imports.
+* Group imports logically.
 
 ### Comments
 
 ```kotlin
-// BAD - comment explains what (code should be self-explanatory)
+// Bad - comment explains what (code should be self-explanatory)
 // Loop through users and find active ones
 val activeUsers = users.filter { it.isActive }
 
-// GOOD - comment explains why (context that code can't express)
+// Good - comment explains why (context that code can't express)
 // Filter inactive users to comply with GDPR deletion requirements
 val activeUsers = users.filter { it.isActive }
 ```
 
-* Code should be self-documenting
-* Comments should explain WHY, not WHAT
-* Keep comments up-to-date or remove them
-* Use KDoc/Javadoc for public APIs
+* Code must be self-documenting.
+* Comments must explain WHY, not WHAT.
+* Keep comments up-to-date or remove them.
+* Use KDoc/Javadoc for public APIs.
 
-## Summary Checklist
+## Summary checklist
 
 Before submitting code, verify:
 
 - [ ] Names are meaningful and descriptive
 - [ ] Functions do one thing and do it well
 - [ ] Abstraction levels are consistent
-- [ ] No duplicate code
-- [ ] No unnecessary complexity
+- [ ] No duplicate code exists
+- [ ] No unnecessary complexity exists
 - [ ] Dependencies are injected (testable)
 - [ ] Edge cases are handled
 - [ ] Code is formatted consistently

@@ -1,33 +1,36 @@
 ---
 name: Git Strategy
 description: Git Flow branching model, Conventional Commits format, and merge strategy
+last-verified: 2026-02-14
 ---
 
-# Git Branching Strategy
+# Git branching strategy
 
 ## Overview
 
 This project follows the **Git Flow** branching model. All branching, merging, and release workflows must adhere to these rules.
 
-> **Tool**: Use [git-flow-next](https://github.com/gittower/git-flow-next) for automated branch management.
+> **Key Principle**: Use Git Flow branches, Conventional Commits, and merge commits for all integrations. Rebase only when updating feature branches from develop.
 
-## Branch Structure
+> **Note**: Use [git-flow-next](https://github.com/gittower/git-flow-next) for automated branch management.
+
+## Branch structure
 
 ```
 main (production)
- │
- ├── hotfix/xxx ──────────── merge back to main + develop
- │
+ |
+ +-- hotfix/xxx -------------- merge back to main + develop
+ |
  develop (integration)
-  │
-  ├── feature/xxx ─────────── merge back to develop
-  │
-  ├── release/x.x.x ──────── merge back to main + develop
-  │
-  └── support/x.x ────────── long-term support for older versions
+  |
+  +-- feature/xxx ------------- merge back to develop
+  |
+  +-- release/x.x.x ---------- merge back to main + develop
+  |
+  +-- support/x.x ------------ long-term support for older versions
 ```
 
-## Branch Types
+## Branch types
 
 | Branch | Base | Merges Into | Naming | Purpose |
 |--------|------|-------------|--------|---------|
@@ -38,7 +41,7 @@ main (production)
 | `hotfix/*` | `main` | `main` + `develop` | `hotfix/{description}` | Critical production fixes |
 | `support/*` | `main` | - | `support/{version}` | Long-term support for older versions |
 
-## Branch Naming Convention
+## Branch naming convention
 
 ### Format
 
@@ -75,7 +78,7 @@ support/1.0
 
 ## Workflow
 
-### Feature Development
+### Feature development
 
 ```bash
 # 1. Start feature from develop
@@ -117,7 +120,7 @@ git commit -m "fix: resolve payment timeout issue"
 git flow hotfix finish fix-payment-timeout
 ```
 
-## Commit Message Convention
+## Commit message convention
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
 
@@ -170,18 +173,18 @@ The two-tier cache (Caffeine + Redis) had a race condition
 where L1 eviction could serve stale data before L2 update.
 ```
 
-## Merge Strategy
+## Merge strategy
 
 | Scenario | Strategy | Reason |
 |----------|----------|--------|
-| Feature → Develop | **Merge commit** | Preserve feature history |
-| Release → Main | **Merge commit** | Clear release boundary |
-| Release → Develop | **Merge commit** | Sync release fixes |
-| Hotfix → Main | **Merge commit** | Clear hotfix boundary |
-| Hotfix → Develop | **Merge commit** | Sync hotfix |
+| Feature to Develop | **Merge commit** | Preserve feature history |
+| Release to Main | **Merge commit** | Clear release boundary |
+| Release to Develop | **Merge commit** | Sync release fixes |
+| Hotfix to Main | **Merge commit** | Clear hotfix boundary |
+| Hotfix to Develop | **Merge commit** | Sync hotfix |
 | Update feature from develop | **Rebase** | Keep feature history linear |
 
-## Tag Convention
+## Tag convention
 
 | Format | Example | When |
 |--------|---------|------|
@@ -194,7 +197,7 @@ Follow [Semantic Versioning](https://semver.org/):
 - **Minor**: New features (backward compatible)
 - **Patch**: Bug fixes (backward compatible)
 
-## Protected Branches
+## Protected branches
 
 | Branch | Push | Force Push | Delete |
 |--------|------|------------|--------|
@@ -204,7 +207,7 @@ Follow [Semantic Versioning](https://semver.org/):
 | `feature/*` | Direct | Allowed | After merge |
 | `hotfix/*` | Direct | Allowed | After merge |
 
-## Summary Checklist
+## Summary checklist
 
 Before merging, verify:
 

@@ -4,6 +4,9 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.datatest.withData
 import io.kotest.matchers.shouldBe
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class DateTimeExtTest : FunSpec({
 
@@ -227,6 +230,115 @@ class DateTimeExtTest : FunSpec({
                 val birthDate = today.minusYears(30)
                 birthDate.getKoreanAge() shouldBe 31
             }
+        }
+    }
+
+    context("toKst") {
+        context("LocalDateTime") {
+            test("should convert UTC to KST by adding 9 hours") {
+                val utc = LocalDateTime.of(2025, 1, 15, 0, 0, 0)
+                utc.toKst() shouldBe LocalDateTime.of(2025, 1, 15, 9, 0, 0)
+            }
+
+            test("should handle date boundary crossing") {
+                val utc = LocalDateTime.of(2025, 1, 15, 20, 0, 0)
+                utc.toKst() shouldBe LocalDateTime.of(2025, 1, 16, 5, 0, 0)
+            }
+
+            test("should handle midnight UTC") {
+                val utc = LocalDateTime.of(2025, 6, 1, 0, 0, 0)
+                utc.toKst() shouldBe LocalDateTime.of(2025, 6, 1, 9, 0, 0)
+            }
+
+            test("should handle year boundary") {
+                val utc = LocalDateTime.of(2024, 12, 31, 15, 0, 0)
+                utc.toKst() shouldBe LocalDateTime.of(2025, 1, 1, 0, 0, 0)
+            }
+
+            test("should preserve seconds and nanoseconds") {
+                val utc = LocalDateTime.of(2025, 3, 10, 12, 30, 45, 123_000_000)
+                utc.toKst() shouldBe LocalDateTime.of(2025, 3, 10, 21, 30, 45, 123_000_000)
+            }
+        }
+
+        context("ZonedDateTime") {
+            test("should convert UTC ZonedDateTime to KST") {
+                val utc = ZonedDateTime.of(2025, 1, 15, 0, 0, 0, 0, ZoneId.of("UTC"))
+                val kst = utc.toKst()
+
+                kst.zone shouldBe ZoneId.of("Asia/Seoul")
+                kst.toLocalDateTime() shouldBe LocalDateTime.of(2025, 1, 15, 9, 0, 0)
+            }
+
+            test("should represent the same instant") {
+                val utc = ZonedDateTime.of(2025, 7, 20, 14, 30, 0, 0, ZoneId.of("UTC"))
+                val kst = utc.toKst()
+
+                kst.toInstant() shouldBe utc.toInstant()
+            }
+        }
+    }
+
+    context("toUtc") {
+        context("LocalDateTime") {
+            test("should convert KST to UTC by subtracting 9 hours") {
+                val kst = LocalDateTime.of(2025, 1, 15, 9, 0, 0)
+                kst.toUtc() shouldBe LocalDateTime.of(2025, 1, 15, 0, 0, 0)
+            }
+
+            test("should handle date boundary crossing") {
+                val kst = LocalDateTime.of(2025, 1, 15, 5, 0, 0)
+                kst.toUtc() shouldBe LocalDateTime.of(2025, 1, 14, 20, 0, 0)
+            }
+
+            test("should handle midnight KST") {
+                val kst = LocalDateTime.of(2025, 6, 1, 0, 0, 0)
+                kst.toUtc() shouldBe LocalDateTime.of(2025, 5, 31, 15, 0, 0)
+            }
+
+            test("should handle year boundary") {
+                val kst = LocalDateTime.of(2025, 1, 1, 0, 0, 0)
+                kst.toUtc() shouldBe LocalDateTime.of(2024, 12, 31, 15, 0, 0)
+            }
+
+            test("should preserve seconds and nanoseconds") {
+                val kst = LocalDateTime.of(2025, 3, 10, 21, 30, 45, 123_000_000)
+                kst.toUtc() shouldBe LocalDateTime.of(2025, 3, 10, 12, 30, 45, 123_000_000)
+            }
+        }
+
+        context("ZonedDateTime") {
+            test("should convert KST ZonedDateTime to UTC") {
+                val kst = ZonedDateTime.of(2025, 1, 15, 9, 0, 0, 0, ZoneId.of("Asia/Seoul"))
+                val utc = kst.toUtc()
+
+                utc.zone shouldBe ZoneId.of("UTC")
+                utc.toLocalDateTime() shouldBe LocalDateTime.of(2025, 1, 15, 0, 0, 0)
+            }
+
+            test("should represent the same instant") {
+                val kst = ZonedDateTime.of(2025, 7, 20, 23, 30, 0, 0, ZoneId.of("Asia/Seoul"))
+                val utc = kst.toUtc()
+
+                utc.toInstant() shouldBe kst.toInstant()
+            }
+        }
+    }
+
+    context("toKst and toUtc roundtrip") {
+        test("LocalDateTime toKst then toUtc should return original value") {
+            val original = LocalDateTime.of(2025, 6, 15, 12, 30, 0)
+            original.toKst().toUtc() shouldBe original
+        }
+
+        test("LocalDateTime toUtc then toKst should return original value") {
+            val original = LocalDateTime.of(2025, 6, 15, 12, 30, 0)
+            original.toUtc().toKst() shouldBe original
+        }
+
+        test("ZonedDateTime roundtrip should preserve instant") {
+            val utc = ZonedDateTime.of(2025, 3, 15, 8, 0, 0, 0, ZoneId.of("UTC"))
+            utc.toKst().toUtc().toInstant() shouldBe utc.toInstant()
         }
     }
 })

@@ -1,0 +1,37 @@
+### Test Slack API (local profile only)
+
+@baseUrl = http://localhost:8080
+@channel = C08PNPZSVAM
+
+### Send text message
+GET {{baseUrl}}/_test/slack/text?channel={{channel}}&title=Test message&message=Hello from HTTP clients
+
+### Send Block Kit message
+GET {{baseUrl}}/_test/slack/blocks?channel={{channel}}
+
+### Send attachment with color (SUCCESS, WARNING, DANGER, INFO)
+GET {{baseUrl}}/_test/slack/attachment?channel={{channel}}&color=SUCCESS
+
+### Send success notification
+GET {{baseUrl}}/_test/slack/success?channel={{channel}}
+
+### Send warning notification
+GET {{baseUrl}}/_test/slack/warning?channel={{channel}}
+
+### Send error notification
+GET {{baseUrl}}/_test/slack/error?channel={{channel}}
+
+### Send info notification
+GET {{baseUrl}}/_test/slack/info?channel={{channel}}
+
+### Send actions (buttons) message
+GET {{baseUrl}}/_test/slack/actions?channel={{channel}}
+
+### Send deploy notification
+GET {{baseUrl}}/_test/slack/deploy?channel={{channel}}
+
+### Send thread reply (replace parentTs with actual ts from a previous response)
+POST {{baseUrl}}/_test/slack/thread?channel={{channel}}&parentTs=1234567890.123456&message=Thread reply test
+
+### 이벤트 기반 알림 전송 (NotificationEventPublisher)
+GET http://localhost:8080/_test/slack/event?channel={{channel}}&title=Test&message=Hello

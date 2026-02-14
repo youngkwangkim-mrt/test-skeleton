@@ -1,13 +1,20 @@
 ---
 name: Project Modules
 description: Project module structure, architecture, dependencies, and conventions for creating new modules
+last-verified: 2026-02-14
 ---
 
 # Project Modules & Architecture
 
+## Overview
+
+This document describes the project's module structure, dependency rules, and conventions for creating new modules.
+
+> **Key Principle**: Dependencies flow in one direction only. Circular and reverse dependencies are prohibited.
+
 ## Architecture
 
-이 프로젝트는 Layered Architecture를 따릅니다.
+This project follows a Layered Architecture.
 
 ```mermaid
 graph TB
@@ -53,23 +60,23 @@ graph TB
     Infra --> Common
 ```
 
-## Module Structure
+## Module structure
 
 ```
 modules/
-├── common/                     # 공통 유틸리티, 예외, 코드, 값 객체
-├── common-web/                 # 웹 공통 (Filter, Interceptor, Handler)
-├── test-support/               # 테스트 픽스처, REST Docs 지원
-├── domain/                     # 도메인 모델, 비즈니스 규칙, JPA Entity, Repository
-├── infrastructure/             # Config, Cache, HTTP Client, 외부 서비스
-├── bootstrap/                  # Spring Boot 앱 모듈
-│   ├── common-api-app/         # 공통 API 서버 (Controller, Facade)
-│   ├── skeleton-api-app/       # API 서버
-│   └── skeleton-worker-app/    # Worker 서버
-└── docs/                       # REST Docs 문서 생성
+├── common/                     # Common utilities, exceptions, codes, value objects
+├── common-web/                 # Web common (Filter, Interceptor, Handler)
+├── test-support/               # Test fixtures, REST Docs support
+├── domain/                     # Domain models, business rules, JPA Entity, Repository
+├── infrastructure/             # Config, Cache, HTTP Client, external services
+├── bootstrap/                  # Spring Boot app modules
+│   ├── common-api-app/         # Common API server (Controller, Facade)
+│   ├── skeleton-api-app/       # API server
+│   └── skeleton-worker-app/    # Worker server
+└── docs/                       # REST Docs document generation
 ```
 
-## Module Dependencies
+## Module dependencies
 
 ```mermaid
 graph TD
@@ -101,32 +108,35 @@ graph TD
 
 ### Dependency Direction Rule
 
+> **IMPORTANT**: All inter-module and inter-package dependencies must be **unidirectional**. Circular and reverse dependencies are prohibited.
+
 * `bootstrap → domain, infrastructure, common-web`
 * `infrastructure → domain, common`
 * `domain → common` (only)
-* common은 최하위 모듈 (다른 모듈에 의존하지 않음)
-* `-app` 모듈은 다른 모듈을 조합하는 역할
+* `common` is the lowest-level module (depends on no other modules)
+* `-app` modules serve as composition roots that assemble other modules
+* Within domain: `dto → entity` (DTO knows Entity). Entity must not import DTO
 
 ## Modules
 
 ### common
 
-공통 유틸리티 모듈. 다른 모든 모듈의 기반.
+Common utility module. Foundation for all other modules.
 
 | Package | Purpose |
 |---------|---------|
 | `codes/` | ResponseCode, ErrorCode, SuccessCode |
 | `exceptions/` | BizException, BizRuntimeException, KnownException |
-| `values/` | Email, PhoneNumber, Money, Rate 값 객체 |
+| `values/` | Email, PhoneNumber, Money, Rate value objects |
 | `utils/datetime/` | DateFormatter, LocalDateRange, SearchDates |
-| `utils/extensions/` | String 마스킹, DateTime 확장 |
-| `utils/cipher/` | AES, SEED 암호화 |
-| `utils/codec/` | URL 인코딩/디코딩 |
-| `utils/coroutine/` | MDC 유지 코루틴 유틸리티 |
+| `utils/extensions/` | String masking, DateTime extensions |
+| `utils/cipher/` | AES, SEED encryption |
+| `utils/codec/` | URL encoding/decoding |
+| `utils/coroutine/` | MDC-preserving coroutine utilities |
 
 ### common-web
 
-웹 공통 인프라 모듈.
+Web common infrastructure module.
 
 | Package | Purpose |
 |---------|---------|
@@ -138,17 +148,17 @@ graph TD
 
 ### domain
 
-도메인 모델, 비즈니스 규칙, JPA Entity, Repository. common 모듈에만 의존.
+Domain models, business rules, JPA Entity, Repository. Depends only on the common module.
 
 | Package | Purpose |
 |---------|---------|
-| `common/entity/` | BaseEntity, BaseTimeEntity (공통 감사 엔티티) |
-| `common/querydsl/` | QuerydslRepositorySupport, QuerydslExpressions (QueryDSL 공통) |
-| `{feature}/dto/` | 도메인 DTO (Info, Request, Exception) |
+| `common/entity/` | BaseEntity, BaseTimeEntity (common audit entities) |
+| `common/querydsl/` | QuerydslRepositorySupport, QuerydslExpressions (QueryDSL common) |
+| `{feature}/dto/` | Domain DTOs (Info, Request, Exception) |
 | `{feature}/entity/` | JPA Entity |
 | `{feature}/repository/` | JpaRepository, QueryRepository |
-| `{feature}/service/` | 비즈니스 로직 |
-| `{feature}/application/` | QueryApplication (조회), CommandApplication (생성/수정/삭제) |
+| `{feature}/service/` | Business logic |
+| `{feature}/application/` | QueryApplication (query), CommandApplication (create/update/delete) |
 
 #### Request Flow
 
@@ -161,52 +171,75 @@ Controller (bootstrap) → Facade (bootstrap)
 
 ### infrastructure
 
-기술 구현 모듈. Config, Cache, HTTP Client, 외부 서비스 연동.
+Technical implementation module. Config, Cache, HTTP Client, external service integration.
 
 | Package | Purpose |
 |---------|---------|
 | `client/` | RestClientConfig, HttpLoggingInterceptor |
 | `cache/` | CacheConfig (Caffeine + Redis) |
 | `redis/` | RedisLockAspect, RedisCacheAspect |
-| `persistence/config/` | JpaConfig (Auditing), QuerydslConfig |
-| `export/` | Excel/CSV 파일 내보내기 (어노테이션 기반, 스타일 프리셋) |
-| `slack/` | Slack SDK 기반 알림 (Kotlin DSL 메시지 빌더) |
+| `persistence/config/` | JpaConfig (Auditing), QuerydslConfig, DataSourceConfig (Master-Slave routing) |
+| `export/` | Excel/CSV file export (annotation-based, style presets) |
+| `slack/` | Slack SDK-based notifications (Kotlin DSL message builder) |
+
+#### DataSource Routing (Master-Slave)
+
+`DataSourceConfig` is activated by `@ConditionalOnProperty(prefix = "spring.datasource.master.hikari", name = ["jdbc-url"])` and provides Master-Slave routing.
+
+| Component | Role |
+|-----------|------|
+| `DataSourceConfig` | Creates Master/Slave HikariCP pools, auto-activated when property exists |
+| `RoutingDataSource` | `@Transactional(readOnly = true)` routes to Slave, otherwise routes to Master |
+| `LazyConnectionDataSourceProxy` | Defers connection acquisition until actual query execution to ensure correct routing |
+
+#### DataSource Configuration by Profile
+
+| Profile | DB | DDL Auto | Master Pool | Slave Pool | Redisson |
+|---------|-----|----------|-------------|------------|----------|
+| `embed, local` | H2 In-Memory (single CP) | `create-drop` | - (max 10) | - | redisson-dev.yml |
+| `dev, dev01, dev02` | MySQL Master-Slave | `validate` | max 10, idle 5 | max 10, idle 5 | redisson-dev.yml |
+| `test, test01, test02` | MySQL Master-Slave | `validate` | max 10, idle 5 | max 10, idle 5 | redisson-test.yml |
+| `stage, prod` | MySQL Master-Slave | `none` | max 20, idle 5 | max 30, idle 10 | redisson-prod.yml |
+
+* `embed, local`: Uses H2 auto-configuration (`DataSourceConfig` bean is not created)
+* `dev, test, stage, prod`: `spring.datasource.master.hikari.jdbc-url` exists, activating `DataSourceConfig`
+* Aurora MySQL HikariCP settings: `max-lifetime: 840000` (14min, for Aurora DNS failover TTL), `connection-timeout: 3000` (3s)
 
 ### bootstrap
 
-Spring Boot Application 모듈.
+Spring Boot Application modules.
 
 | Module | Purpose |
 |--------|---------|
-| `common-api-app` | 공통 API 서버 (Holiday API, 데이터 초기화) |
-| `skeleton-api-app` | REST API 서버 (Controllers) |
-| `skeleton-worker-app` | Worker 서버 (Scheduled Jobs) |
+| `common-api-app` | Common API server (Holiday API, data initialization) |
+| `skeleton-api-app` | REST API server (Controllers) |
+| `skeleton-worker-app` | Worker server (Scheduled Jobs) |
 
 ### test-support
 
-테스트 픽스처와 REST Docs 지원 모듈.
+Test fixtures and REST Docs support module.
 
 | Package | Purpose |
 |---------|---------|
-| `IntegratedTestSupport` | 통합 테스트 기반 클래스 |
-| `EndPointTestSupport` | API 엔드포인트 테스트 기반 클래스 |
-| `RestDocsSupport` | Spring REST Docs Kotlin DSL 지원 |
-| `TestTimeRunner` | 테스트 시간 측정 유틸리티 |
+| `IntegratedTestSupport` | Integration test base class |
+| `EndPointTestSupport` | API endpoint test base class |
+| `RestDocsSupport` | Spring REST Docs Kotlin DSL support |
+| `TestTimeRunner` | Test execution time measurement utility |
 
 ### docs
 
-Spring REST Docs 기반 API 문서 생성 모듈.
+API document generation module based on Spring REST Docs.
 
-* Asciidoctor 플러그인으로 HTML 문서 생성
-* `common-api-app`, `skeleton-api-app` 테스트에서 생성된 스니펫 수집
-* `./gradlew :modules:docs:docs` 명령으로 문서 생성
+* Generates HTML documents via the Asciidoctor plugin
+* Collects snippets generated from `common-api-app` and `skeleton-api-app` tests
+* Generate documents with `./gradlew :modules:docs:docs`
 
-## Module Naming Convention
+## Module naming convention
 
-* `-app` suffix: Spring Boot executable (bootJar 활성화)
+* `-app` suffix: Spring Boot executable (bootJar enabled)
 * No suffix: Library module (jar only)
 
-## Package Naming Convention
+## Package naming convention
 
 ```
 com.myrealtrip.domain.{feature}/
@@ -234,7 +267,7 @@ com.myrealtrip.{appname}/
 └── config/             # Configuration classes
 ```
 
-## Creating New Module
+## Creating new module
 
 ### Domain Feature
 
@@ -255,7 +288,7 @@ modules/domain/src/main/kotlin/com/myrealtrip/domain/myfeature/
     └── MyFeatureCommandApplication.kt # Command use cases
 ```
 
-### Bootstrap App Module
+### Bootstrap app module
 
 ```
 modules/bootstrap/my-api-app/
@@ -275,9 +308,9 @@ modules/bootstrap/my-api-app/
     └── MyApiApplication.kt
 ```
 
-## HTTP Client Pattern
+## HTTP client pattern
 
-### @HttpExchange 사용
+### Using @HttpExchange
 
 ```kotlin
 @HttpExchange("/todos")
@@ -293,7 +326,7 @@ interface TodoClient {
 }
 ```
 
-### Client Configuration
+### Client configuration
 
 ```kotlin
 @Configuration
@@ -313,9 +346,9 @@ class TodoClientConfig {
 }
 ```
 
-## Response Format
+## Response format
 
-모든 API 응답은 `ApiResource<T>` 형식을 따릅니다.
+All API responses follow the `ApiResource<T>` format.
 
 ```kotlin
 @GetMapping("/{id}")
@@ -324,7 +357,7 @@ fun findById(@PathVariable id: Int): ApiResource<Todo> {
 }
 ```
 
-응답 구조:
+Response structure:
 
 ```json
 {
@@ -340,17 +373,17 @@ fun findById(@PathVariable id: Int): ApiResource<Todo> {
 }
 ```
 
-## Exception Handling
+## Exception handling
 
-### Exception Types
+### Exception types
 
 | Exception | Usage | Log Level |
 |-----------|-------|-----------|
-| `KnownException` | 예상된 에러 (validation, not found) | INFO |
-| `BizRuntimeException` | 비즈니스 에러 (처리 불가) | ERROR |
-| `BizException` | Checked 비즈니스 예외 | ERROR |
+| `KnownException` | Expected errors (validation, not found) | INFO |
+| `BizRuntimeException` | Business errors (unrecoverable) | ERROR |
+| `BizException` | Checked business exceptions | ERROR |
 
-### Custom Exception
+### Custom exception
 
 ```kotlin
 class TodoNotFoundException(id: Int) : KnownException(
@@ -359,16 +392,16 @@ class TodoNotFoundException(id: Int) : KnownException(
 )
 ```
 
-## Caching Strategy
+## Caching strategy
 
-### Two-tier Cache
+### Two-tier cache
 
 | Layer | Configuration |
 |-------|---------------|
 | L1 (Caffeine) | Local memory, 200 items, 30min TTL |
 | L2 (Redis) | Distributed, configurable TTL |
 
-### Cache Names
+### Cache names
 
 | Name | TTL | MaxIdle | Usage |
 |------|-----|---------|-------|

@@ -1,18 +1,23 @@
 package com.myrealtrip.commonweb.handlers
 
-import io.github.oshai.kotlinlogging.KotlinLogging
 import com.myrealtrip.common.codes.ResponseCode
 import com.myrealtrip.common.codes.response.ErrorCode
 import com.myrealtrip.common.exceptions.BizException
 import com.myrealtrip.common.exceptions.BizRuntimeException
 import com.myrealtrip.common.exceptions.KnownException
 import com.myrealtrip.commonweb.response.resource.ApiResource
+import com.myrealtrip.commonweb.security.TokenErrorCode
 import com.myrealtrip.commonweb.utils.ErrorLogPrintUtil
+import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.ConstraintViolationException
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.security.access.AccessDeniedException
+import org.springframework.security.core.AuthenticationException
+import org.springframework.security.oauth2.jwt.JwtException
 import org.springframework.validation.FieldError
 import org.springframework.web.HttpMediaTypeNotSupportedException
 import org.springframework.web.HttpRequestMethodNotSupportedException
@@ -70,7 +75,7 @@ class GlobalExceptionHandlerV2 {
     ): ResponseEntity<ApiResource<Any>> = when (ex) {
         is NoResourceFoundException,
         is HttpRequestMethodNotSupportedException,
-        -> createApiResource(request, ErrorCode.NOT_FOUND, ex)
+            -> createApiResource(request, ErrorCode.NOT_FOUND, ex)
 
         is MethodArgumentNotValidException -> {
             val errors = ex.bindingResult.allErrors
@@ -103,14 +108,24 @@ class GlobalExceptionHandlerV2 {
 
         is HttpMessageNotReadableException,
         is HttpMediaTypeNotSupportedException,
-        -> {
+            -> {
             val message = ex.message?.split(":")?.firstOrNull() ?: ErrorCode.NOT_READABLE.message
             createApiResource(request, ErrorCode.NOT_READABLE, ex, printStackTrace = false, data = message)
         }
 
+        is ConstraintViolationException -> {
+            val errors = ex.constraintViolations
+                .associate { it.propertyPath.toString() to it.message }
+            createApiResource(request, ErrorCode.INVALID_ARGUMENT, ex, printStackTrace = false, data = errors)
+        }
+
         is MultipartException -> createApiResource(request, ErrorCode.INVALID_ARGUMENT, ex)
 
+        is AuthenticationException -> createApiResource(request, ErrorCode.UNAUTHORIZED, ex)
+
         is AccessDeniedException -> createApiResource(request, ErrorCode.FORBIDDEN, ex)
+
+        is JwtException -> createApiResource(request, TokenErrorCode.TOKEN_ERROR, ex)
 
         is IllegalArgumentException -> createApiResource(request, ErrorCode.ILLEGAL_ARGUMENT, ex)
 

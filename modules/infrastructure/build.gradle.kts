@@ -38,6 +38,7 @@ dependencies {
 
     // Database
     runtimeOnly(rootProject.libs.h2)
+    runtimeOnly(rootProject.libs.mysql)
 }
 
 // Pass system properties to tests (for benchmark tests)

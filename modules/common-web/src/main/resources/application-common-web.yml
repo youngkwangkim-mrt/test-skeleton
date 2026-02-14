@@ -1,3 +1,10 @@
+# application
+common-web:
+  jwt:
+    key: "dev-aaaaaaaa-0000-0000-0000-zzzzzzzzzzza"
+    access-token-expire: 1h
+    refresh-token-expire: 14d
+
 # logging
 logging:
   group:

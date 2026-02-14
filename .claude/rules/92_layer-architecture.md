@@ -1,15 +1,16 @@
 ---
 name: Layer Architecture
 description: Layer structure, responsibilities, DTO flow, and conventions based on Holiday feature reference implementation
+last-verified: 2026-02-14
 ---
 
 # Layer Architecture
 
 ## Overview
 
-이 프로젝트는 4-Layer Architecture를 따릅니다.
+This project follows a 4-Layer Architecture.
 
-> **Core Rule**: 상위 레이어만 하위 레이어에 의존한다. 역방향 의존은 금지.
+> **Key Principle**: Upper layers depend on lower layers only. Reverse dependencies are prohibited.
 
 ```
 Bootstrap (Controller → Facade)
@@ -25,27 +26,27 @@ Domain Entity (JPA Entity)
 
 ---
 
-## Layer 1: Bootstrap (HTTP Entry Point)
+## Layer 1: Bootstrap (HTTP entry point)
 
 > **Module**: `modules/bootstrap/{app-name}/`
 
-HTTP 요청/응답을 처리하는 진입점. API DTO 변환과 라우팅만 담당.
+The entry point for handling HTTP requests and responses. Responsible only for API DTO conversion and routing.
 
 ### Controller
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `{appname}/api/{Feature}Controller.kt` |
-| 역할 | HTTP 엔드포인트 정의, 요청 라우팅 |
-| 의존 | Facade만 주입 (Service, Application 직접 주입 금지) |
-| 반환 | `ResponseEntity<ApiResource<T>>` |
-| 변환 | API Request DTO → Domain Request DTO (간단한 변환만) |
+| Location | `{appname}/api/{Feature}Controller.kt` |
+| Responsibility | Define HTTP endpoints, route requests |
+| Dependency | Inject Facade only (direct injection of Service, Application, or Repository is prohibited) |
+| Return | `ResponseEntity<ApiResource<T>>` |
+| Conversion | API Request DTO to Domain Request DTO (simple conversion only) |
 
 ```kotlin
 @RestController
 @RequestMapping("/api/holidays")
 class HolidayController(
-    private val holidayFacade: HolidayFacade,  // Facade만 주입
+    private val holidayFacade: HolidayFacade,  // Inject Facade only
 ) {
     @GetMapping("/{year}")
     fun getByYear(@PathVariable year: Int): ResponseEntity<ApiResource<HolidaysResponse>> =
@@ -63,10 +64,10 @@ class HolidayController(
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `{appname}/facade/{Feature}Facade.kt` |
-| 역할 | API DTO ↔ Domain DTO 변환, Application 호출 조합 |
-| 의존 | QueryApplication, CommandApplication 주입 |
-| 어노테이션 | `@Component` |
+| Location | `{appname}/facade/{Feature}Facade.kt` |
+| Responsibility | Convert between API DTO and Domain DTO, orchestrate Application calls |
+| Dependency | Inject QueryApplication and CommandApplication |
+| Annotation | `@Component` |
 
 ```kotlin
 @Component
@@ -74,7 +75,7 @@ class HolidayFacade(
     private val holidayQueryApplication: HolidayQueryApplication,
     private val holidayCommandApplication: HolidayCommandApplication,
 ) {
-    // Domain DTO → API DTO 변환
+    // Convert Domain DTO to API DTO
     fun findByYear(year: Int): HolidaysResponse {
         val holidays = holidayQueryApplication.findByYear(year)
         return HolidaysResponse.from(holidays)
@@ -91,27 +92,27 @@ class HolidayFacade(
 
 | Rule | Description |
 |------|-------------|
-| Request 위치 | `{appname}/dto/request/{Feature}ApiRequest.kt` |
-| Response 위치 | `{appname}/dto/response/{Feature}ApiResponse.kt` |
-| 네이밍 | Request: `{Action}{Feature}ApiRequest`, Response: `{Feature}Dto`, `{Feature}sResponse` |
+| Request location | `{appname}/dto/request/{Feature}ApiRequest.kt` |
+| Response location | `{appname}/dto/response/{Feature}ApiResponse.kt` |
+| Naming | Request: `{Action}{Feature}ApiRequest`, Response: `{Feature}Dto`, `{Feature}sResponse` |
 
 ---
 
-## Layer 2: Domain Application (Orchestration)
+## Layer 2: Domain application (orchestration)
 
 > **Module**: `modules/domain/`
 > **Package**: `domain.{feature}.application`
 
-트랜잭션 경계를 관리하는 얇은 위임 계층. Query/Command 분리 (CQRS-light).
+A thin delegation layer that manages transaction boundaries. Separates Query and Command (CQRS-light).
 
-### QueryApplication (조회)
+### QueryApplication (query)
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/application/{Feature}QueryApplication.kt` |
-| 어노테이션 | `@Service`, `@Transactional(readOnly = true)` (클래스 레벨) |
-| 의존 | Service만 주입 |
-| 반환 | Domain DTO (`{Feature}Info`) |
+| Location | `domain/{feature}/application/{Feature}QueryApplication.kt` |
+| Annotation | `@Service`, `@Transactional(readOnly = true)` (class-level) |
+| Dependency | Inject Service only |
+| Return | Domain DTO (`{Feature}Info`) |
 
 ```kotlin
 @Service
@@ -127,14 +128,14 @@ class HolidayQueryApplication(
 }
 ```
 
-### CommandApplication (생성/수정/삭제)
+### CommandApplication (create/update/delete)
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/application/{Feature}CommandApplication.kt` |
-| 어노테이션 | `@Service`, `@Transactional` (클래스 레벨) |
-| 의존 | Service만 주입 |
-| 반환 | Domain DTO (`{Feature}Info`) |
+| Location | `domain/{feature}/application/{Feature}CommandApplication.kt` |
+| Annotation | `@Service`, `@Transactional` (class-level) |
+| Dependency | Inject Service only |
+| Return | Domain DTO (`{Feature}Info`) |
 
 ```kotlin
 @Service
@@ -155,20 +156,20 @@ class HolidayCommandApplication(
 
 ---
 
-## Layer 3: Domain Service (Business Logic)
+## Layer 3: Domain service (business logic)
 
 > **Module**: `modules/domain/`
 > **Package**: `domain.{feature}.service`
 
-핵심 비즈니스 로직. Entity 조작과 Domain DTO 변환 담당.
+Core business logic. Responsible for Entity manipulation and Domain DTO conversion.
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/service/{Feature}Service.kt` |
-| 어노테이션 | `@Service` |
-| 의존 | Repository만 주입 (JpaRepository, QueryRepository) |
-| 반환 | Domain DTO (`{Feature}Info`) |
-| 변환 | Entity → Domain DTO (`entity.toInfo()`) |
+| Location | `domain/{feature}/service/{Feature}Service.kt` |
+| Annotation | `@Service` |
+| Dependency | Inject Repository only (JpaRepository, QueryRepository) |
+| Return | Domain DTO (`{Feature}Info`) |
+| Conversion | Entity to Domain DTO (`{Feature}Info.from(entity)`) |
 
 ```kotlin
 @Service
@@ -176,18 +177,18 @@ class HolidayService(
     private val holidayJpaRepository: HolidayJpaRepository,
 ) {
     fun findByYear(year: Int): List<HolidayInfo> =
-        holidayJpaRepository.findByYear(year).map { it.toInfo() }
+        holidayJpaRepository.findByYear(year).map { HolidayInfo.from(it) }
 
     fun create(request: CreateHolidayRequest): HolidayInfo {
         val holiday = Holiday.create(request.holidayDate, request.name)
-        return holidayJpaRepository.save(holiday).toInfo()
+        return HolidayInfo.from(holidayJpaRepository.save(holiday))
     }
 
     fun update(id: Long, request: UpdateHolidayRequest): HolidayInfo {
         val holiday = holidayJpaRepository.findById(id)
             .orElseThrow { HolidayNotFoundException(id) }
         holiday.update(request.holidayDate, request.name)
-        return holiday.toInfo()
+        return HolidayInfo.from(holiday)
     }
 
     fun delete(id: Long) {
@@ -200,20 +201,20 @@ class HolidayService(
 
 ---
 
-## Layer 4: Domain Repository (Persistence)
+## Layer 4: Domain repository (persistence)
 
 > **Module**: `modules/domain/`
 > **Package**: `domain.{feature}.repository`
 
-데이터 접근 계층. Spring Data JPA와 QueryDSL 두 가지 방식.
+Data access layer. Two approaches: Spring Data JPA and QueryDSL.
 
 ### JpaRepository
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/repository/{Feature}JpaRepository.kt` |
-| 방식 | Spring Data JPA interface |
-| 용도 | 단순 CRUD, 파생 쿼리, 커스텀 `@Query` |
+| Location | `domain/{feature}/repository/{Feature}JpaRepository.kt` |
+| Approach | Spring Data JPA interface |
+| Purpose | Simple CRUD, derived queries, custom `@Query` |
 
 ```kotlin
 interface HolidayJpaRepository : JpaRepository<Holiday, Long> {
@@ -228,10 +229,10 @@ interface HolidayJpaRepository : JpaRepository<Holiday, Long> {
 
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/repository/{Feature}QueryRepository.kt` |
-| 방식 | QueryDSL, `QuerydslRepositorySupport` 상속 |
-| 용도 | 동적 조건, 페이징, 복잡 조인 |
-| 네이밍 | `fetch` 접두사 필수 (see `22_querydsl.md`) |
+| Location | `domain/{feature}/repository/{Feature}QueryRepository.kt` |
+| Approach | QueryDSL, extends `QuerydslRepositorySupport` |
+| Purpose | Dynamic conditions, pagination, complex joins |
+| Naming | `fetch` prefix required (see `42_querydsl.md`) |
 
 ```kotlin
 @Repository
@@ -249,26 +250,28 @@ class HolidayQueryRepository : QuerydslRepositorySupport(Holiday::class.java) {
                 queryFactory.select(holiday.count()).from(holiday)
                     .where(holiday.holidayDate.year().eq(year))
             },
-        ).map { it.toInfo() }
+        ).map { HolidayInfo.from(it) }
     }
 }
 ```
 
 ---
 
-## Domain Entity & DTO
+## Domain entity & DTO
 
 > **Module**: `modules/domain/`
 
 ### Entity
 
+> **IMPORTANT**: Entity must not know about DTOs. Entity-to-DTO conversion uses the DTO's `companion object { fun from(entity) }` factory method.
+
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/entity/{Feature}.kt` |
-| 상속 | `BaseTimeEntity` 또는 `BaseEntity` |
-| 불변성 | private setter, `update()` 메서드로 변경 |
-| 팩토리 | `companion object` 내 `create()` 메서드 |
-| 변환 | `toInfo()` 메서드로 Domain DTO 변환 |
+| Location | `domain/{feature}/entity/{Feature}.kt` |
+| Inheritance | `BaseTimeEntity` or `BaseEntity` |
+| Immutability | Private setter, mutations via `update()` method |
+| Factory | `create()` method in `companion object` |
+| Dependency direction | Entity must not import DTO (DTO imports Entity) |
 
 ```kotlin
 @Entity
@@ -281,7 +284,7 @@ class Holiday(
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long = id ?: 0
+    val id: Long? = id
 
     @Column(nullable = false)
     var holidayDate: LocalDate = holidayDate
@@ -296,8 +299,6 @@ class Holiday(
         this.name = name
     }
 
-    fun toInfo() = HolidayInfo(id = id, holidayDate = holidayDate, name = name)
-
     companion object {
         fun create(holidayDate: LocalDate, name: String) = Holiday(holidayDate = holidayDate, name = name)
     }
@@ -306,16 +307,30 @@ class Holiday(
 
 ### Domain DTOs
 
+> **IMPORTANT**: Domain DTOs convert from Entity using a `companion object { fun from(entity) }` factory method. Dependency direction: DTO depends on Entity (DTO knows Entity).
+
 | Rule | Description |
 |------|-------------|
-| 위치 | `domain/{feature}/dto/` |
-| 조회 DTO | `{Feature}Info` — Entity에서 변환된 읽기 전용 DTO |
-| 생성 요청 | `Create{Feature}Request` |
-| 수정 요청 | `Update{Feature}Request` |
-| 예외 | `{Feature}NotFoundException` (extends `KnownException`) |
+| Location | `domain/{feature}/dto/` |
+| Query DTO | `{Feature}Info` -- includes `companion object { fun from(entity) }` factory method |
+| Create request | `Create{Feature}Request` |
+| Update request | `Update{Feature}Request` |
+| Exception | `{Feature}NotFoundException` (extends `KnownException`) |
 
 ```kotlin
-data class HolidayInfo(val id: Long, val holidayDate: LocalDate, val name: String)
+data class HolidayInfo(
+    val id: Long,
+    val holidayDate: LocalDate,
+    val name: String,
+) {
+    companion object {
+        fun from(entity: Holiday) = HolidayInfo(
+            id = entity.id!!,
+            holidayDate = entity.holidayDate,
+            name = entity.name,
+        )
+    }
+}
 
 data class CreateHolidayRequest(val holidayDate: LocalDate, val name: String)
 
@@ -328,19 +343,19 @@ class HolidayNotFoundException(id: Long) : KnownException(
 
 ---
 
-## DTO Flow (Data Conversion Points)
+## DTO flow (data conversion points)
 
 ```
 [HTTP Request JSON]
     ↓ deserialize
 CreateHolidayApiRequest (Bootstrap: dto/request/)
-    ↓ Controller에서 변환
+    ↓ Convert in Controller
 CreateHolidayRequest (Domain: dto/)
     ↓ Facade → Application → Service
 Holiday Entity (Domain: entity/)
-    ↓ entity.toInfo()
+    ↓ HolidayInfo.from(entity)
 HolidayInfo (Domain: dto/)
-    ↓ Facade에서 변환 (HolidayDto.from())
+    ↓ Convert in Facade (HolidayDto.from())
 HolidayDto (Bootstrap: dto/response/)
     ↓ ApiResource.success() wrapping
 [HTTP Response JSON]
@@ -350,65 +365,148 @@ HolidayDto (Bootstrap: dto/response/)
 
 | Conversion | Where | Method |
 |------------|-------|--------|
-| API Request → Domain Request | Controller | 생성자 직접 호출 |
-| Entity → Domain DTO | Service | `entity.toInfo()` |
-| Domain DTO → API Response | Facade | `ResponseDto.from(domainDto)` |
+| API Request to Domain Request | Controller | Direct constructor call |
+| Entity to Domain DTO | Service | `{Feature}Info.from(entity)` |
+| Domain DTO to API Response | Facade | `ResponseDto.from(domainDto)` |
 
-> **IMPORTANT**: Controller는 Entity를 직접 다루지 않는다. Facade는 Entity를 직접 다루지 않는다.
+> **IMPORTANT**: Controller must not handle Entity directly. Facade must not handle Entity directly.
+
+### Dependency direction rule (within domain)
+
+> **IMPORTANT**: Dependencies must be unidirectional. Entity importing DTO is prohibited.
+
+```
+Correct (unidirectional): DTO(HolidayInfo) --imports--> Entity(Holiday)
+Violation (reversed):     Entity(Holiday)  --imports--> DTO(HolidayInfo)  -- Prohibited!
+```
+
+| Pattern | Direction | Allowed |
+|---------|-----------|---------|
+| `HolidayInfo.from(entity)` | DTO depends on Entity | Yes (correct) |
+| `entity.toInfo()` | Entity depends on DTO | No (reversed) |
+| `HolidayDto.from(info)` | API DTO depends on Domain DTO | Yes (correct) |
 
 ---
 
-## Dependency Injection Rules
+## Dependency injection rules
 
-| Layer | 주입 대상 | 금지 |
-|-------|-----------|------|
-| Controller | Facade만 | Service, Application, Repository 직접 주입 금지 |
-| Facade | QueryApplication, CommandApplication | Service, Repository 직접 주입 금지 |
-| Application | Service만 | Repository 직접 주입 금지 |
-| Service | JpaRepository, QueryRepository | 다른 Service 주입 가능 (동일 레이어) |
+| Layer | Injection Target | Prohibited |
+|-------|------------------|------------|
+| Controller | Facade only | Direct injection of Service, Application, or Repository |
+| Facade | QueryApplication, CommandApplication | Direct injection of Service or Repository |
+| Application | Service only | Direct injection of Repository |
+| Service | JpaRepository, QueryRepository | Other Service injection is allowed (same layer) |
 
 ```
 Controller → Facade → Application → Service → Repository
-    (각 레이어는 바로 아래 레이어만 주입)
+    (Each layer injects only the layer directly below it)
 ```
 
 ---
 
-## Transaction Rules
+## Transaction rules
 
 | Layer | Transaction | Reason |
 |-------|-------------|--------|
-| Controller | 없음 | HTTP 계층, 트랜잭션 관리 안 함 |
-| Facade | 없음 | DTO 변환만, 트랜잭션 불필요 |
-| QueryApplication | `@Transactional(readOnly = true)` | 읽기 최적화 |
-| CommandApplication | `@Transactional` | 쓰기 트랜잭션 |
-| Service | 없음 (Application에서 전파) | 중복 트랜잭션 방지 |
+| Controller | None | HTTP layer, does not manage transactions |
+| Facade | None | DTO conversion only, no transaction needed |
+| QueryApplication | `@Transactional(readOnly = true)` | Read-only optimization |
+| CommandApplication | `@Transactional` | Write transaction |
+| Service | None (propagated from Application) | Prevents duplicate transactions |
 
 ---
 
-## Anti-Patterns
+## Cross-domain orchestration
+
+### Facade: multi-domain composition (separate transactions)
+
+Facade can call multiple domain Applications to compose results. Since Facade has no `@Transactional`, each Application call runs in its own transaction.
+
+```kotlin
+// Good: Compose multiple domain Applications (each in a separate transaction)
+@Component
+class BookingFacade(
+    private val bookingCommandApplication: BookingCommandApplication,
+    private val holidayQueryApplication: HolidayQueryApplication,
+    private val userQueryApplication: UserQueryApplication,
+) {
+    fun create(request: CreateBookingApiRequest): BookingDto {
+        val user = userQueryApplication.findById(request.userId)        // Transaction 1
+        val holidays = holidayQueryApplication.findByYear(request.year) // Transaction 2
+        val booking = bookingCommandApplication.create(request.toDomainRequest()) // Transaction 3
+        return BookingDto.from(booking, user, holidays)
+    }
+}
+```
+
+| Allowed | Not Allowed |
+|---------|-------------|
+| Call multiple domain Applications | Business logic (validation, calculation) |
+| API DTO ↔ Domain DTO conversion | Direct Repository access |
+| Response data assembly | Direct Service injection |
+
+> **Note**: Each Application call from Facade runs in a separate transaction. This is suitable for independent read compositions where atomicity is not required.
+
+### Cross-domain Application: single transaction across domains
+
+When multiple domain write operations must be atomic, create a cross-domain Application that injects Services from different domains.
+
+```kotlin
+// Good: Multiple domain Services in a single transaction
+@Service
+@Transactional
+class BookingCommandApplication(
+    private val bookingService: BookingService,
+    private val paymentService: PaymentService,
+    private val inventoryService: InventoryService,
+) {
+    fun createWithPayment(request: CreateBookingRequest): BookingInfo {
+        val booking = bookingService.create(request)
+        paymentService.charge(booking.id, request.amount)
+        inventoryService.decreaseStock(request.productId)
+        return booking
+        // If any step fails, the entire transaction rolls back
+    }
+}
+```
+
+| Approach | Transaction | Use Case |
+|----------|-------------|----------|
+| Facade → multiple Applications | Separate per call | Independent read compositions |
+| Application → multiple Services | Single (atomic) | Write operations requiring atomicity |
+
+> **IMPORTANT**: Application can only inject Services. Inject Services from other domains directly to execute within a single `@Transactional`. Injecting another Application from an Application is prohibited.
+
+---
+
+## Anti-patterns
 
 | Anti-Pattern | Problem | Correct |
 |--------------|---------|---------|
-| Controller에서 Service 직접 호출 | Facade 우회, DTO 변환 누락 | Controller → Facade → Application |
-| Facade에서 Repository 호출 | 레이어 건너뛰기 | Facade → Application → Service → Repository |
-| Service에서 API DTO 반환 | Bootstrap 의존성 역전 | Service는 Domain DTO만 반환 |
-| Entity를 API 응답으로 직접 반환 | 내부 구조 노출 | Entity → Info → Dto 변환 |
-| Application에서 비즈니스 로직 구현 | Application은 위임만 | 비즈니스 로직은 Service에 |
-| Service에 `@Transactional` 추가 | Application과 중복 | Application에서만 트랜잭션 관리 |
+| Calling Service directly from Controller | Bypasses Facade, misses DTO conversion | Controller → Facade → Application |
+| Calling Repository from Facade | Skips layers | Facade → Application → Service → Repository |
+| Returning API DTO from Service | Reverses dependency on Bootstrap | Service returns Domain DTO only |
+| Returning Entity directly as API response | Exposes internal structure | Convert Entity → Info → Dto |
+| Implementing business logic in Application | Application delegates only | Business logic belongs in Service |
+| Adding `@Transactional` to Service | Duplicates with Application | Manage transactions in Application only |
+| Defining `toInfo()` method on Entity | Entity depends on DTO (dependency reversal) | Use `{Feature}Info.from(entity)` factory |
+| Adding `@Transactional` to Facade for atomicity | Facade is not a transaction boundary, race conditions possible | Create a cross-domain Application with multiple Services |
+| Application injecting another Application | Tangled transaction boundaries, circular risk | Application injects Services only |
+| Putting business validation in Facade | No transaction protection, domain logic leaks to Bootstrap | Validation belongs in Service |
 
 ---
 
-## Summary Checklist
+## Summary checklist
 
-새 기능 추가 시 확인:
+Verify when adding a new feature:
 
-- [ ] Controller는 Facade만 주입하고 있는가
-- [ ] Facade는 Application만 주입하고 있는가
-- [ ] Application은 Service만 주입하고 있는가
-- [ ] `@Transactional`은 Application 레벨에만 있는가
-- [ ] QueryApplication은 `readOnly = true`인가
-- [ ] Entity → Info 변환은 Service에서 수행하는가
-- [ ] Info → API DTO 변환은 Facade에서 수행하는가
-- [ ] API Request → Domain Request 변환은 Controller에서 수행하는가
-- [ ] Domain DTO가 Bootstrap 모듈에 의존하지 않는가
+- [ ] Controller injects Facade only
+- [ ] Facade injects Application only
+- [ ] Application injects Service only
+- [ ] `@Transactional` exists at the Application level only
+- [ ] QueryApplication uses `readOnly = true`
+- [ ] Entity-to-Info conversion uses `{Feature}Info.from(entity)` pattern
+- [ ] Entity class has no DTO imports
+- [ ] Info-to-API DTO conversion is performed in Facade
+- [ ] API Request-to-Domain Request conversion is performed in Controller
+- [ ] Domain DTOs do not depend on Bootstrap module

@@ -26,7 +26,7 @@ class HolidayQueryRepository : QuerydslRepositorySupport(Holiday::class.java) {
                     .from(holiday)
                     .where(holiday.holidayDate.year().eq(year))
             },
-        ).map { it.toInfo() }
+        ).map { HolidayInfo.from(it) }
     }
 
     fun fetchPageByYearAndMonth(year: Int, month: Int, pageable: Pageable): Page<HolidayInfo> {
@@ -50,6 +50,6 @@ class HolidayQueryRepository : QuerydslRepositorySupport(Holiday::class.java) {
                         holiday.holidayDate.month().eq(month),
                     )
             },
-        ).map { it.toInfo() }
+        ).map { HolidayInfo.from(it) }
     }
 }

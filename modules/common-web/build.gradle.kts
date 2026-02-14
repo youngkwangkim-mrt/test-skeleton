@@ -2,6 +2,7 @@
 
 dependencies {
     api(rootProject.libs.bundles.spring.web)
+    api(rootProject.libs.bundles.spring.security)
     api(rootProject.libs.bundles.metrics)
 
     // Swagger/OpenAPI

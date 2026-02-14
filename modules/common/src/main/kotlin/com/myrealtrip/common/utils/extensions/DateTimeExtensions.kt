@@ -2,11 +2,10 @@
 
 package com.myrealtrip.common.utils.extensions
 
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.Period
-import java.time.ZoneId
-import java.time.ZonedDateTime
+import java.time.*
+
+private val KST = ZoneId.of("Asia/Seoul")
+private val UTC = ZoneId.of("UTC")
 
 /**
  * @return true if this date is today
@@ -54,14 +53,22 @@ fun LocalDate.getKoreanAge(targetDate: LocalDate = LocalDate.now()): Int {
     return targetDate.year - this.year + 1
 }
 
-private val KST = ZoneId.of("Asia/Seoul")
+/**
+ * @return UTC 기준 LocalDateTime을 KST LocalDateTime으로 변환합니다.
+ */
+fun LocalDateTime.toKst(): LocalDateTime = this.atZone(UTC).withZoneSameInstant(KST).toLocalDateTime()
 
 /**
- * UTC 기준 LocalDateTime을 KST LocalDateTime으로 변환합니다.
+ * @return UTC 기준 ZonedDateTime을 KST ZonedDateTime으로 변환합니다.
  */
-fun LocalDateTime.kst(): LocalDateTime = this.atZone(ZoneId.of("UTC")).withZoneSameInstant(KST).toLocalDateTime()
+fun ZonedDateTime.toKst(): ZonedDateTime = this.withZoneSameInstant(KST)
 
 /**
- * UTC 기준 ZonedDateTime을 KST ZonedDateTime으로 변환합니다.
+ * @return KST 기준 LocalDateTime을 UTC LocalDateTime으로 변환합니다.
  */
-fun ZonedDateTime.kst(): ZonedDateTime = this.withZoneSameInstant(KST)
+fun LocalDateTime.toUtc(): LocalDateTime = this.atZone(KST).withZoneSameInstant(UTC).toLocalDateTime()
+
+/**
+ * @return KST 기준 ZonedDateTime을 UTC ZonedDateTime으로 변환합니다.
+ */
+fun ZonedDateTime.toUtc(): ZonedDateTime = this.withZoneSameInstant(UTC)

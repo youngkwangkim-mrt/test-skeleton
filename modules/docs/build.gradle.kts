@@ -63,3 +63,18 @@ tasks {
         outputs.upToDateWhen { false }
     }
 }
+
+// Force test re-execution when docs task is in the build graph
+gradle.taskGraph.whenReady {
+    if (hasTask(":modules:docs:docs") || hasTask(":modules:docs:copySnippets")) {
+        allTasks.filter {
+            it.path in listOf(
+                ":modules:bootstrap:common-api-app:test",
+                ":modules:bootstrap:skeleton-api-app:test"
+            )
+        }.forEach { task ->
+            task.outputs.upToDateWhen { false }
+            task.outputs.cacheIf { false }
+        }
+    }
+}

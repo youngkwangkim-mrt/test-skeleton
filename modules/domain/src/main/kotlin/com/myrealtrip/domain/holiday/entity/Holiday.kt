@@ -1,7 +1,6 @@
 package com.myrealtrip.domain.holiday.entity
 
 import com.myrealtrip.domain.common.entity.BaseTimeEntity
-import com.myrealtrip.domain.holiday.dto.HolidayInfo
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.GeneratedValue
@@ -40,12 +39,6 @@ class Holiday(
         this.holidayDate = holidayDate
         this.name = name
     }
-
-    fun toInfo() = HolidayInfo(
-        id = id!!,
-        holidayDate = holidayDate,
-        name = name,
-    )
 
     companion object {
         fun create(holidayDate: LocalDate, name: String) = Holiday(

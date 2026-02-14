@@ -68,6 +68,7 @@ subprojects {
 
     // Test Configuration
     tasks.withType<Test> {
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
         useJUnitPlatform()
         testLogging {
             events("passed", "skipped", "failed")
@@ -118,6 +119,10 @@ configure(subprojects.filter { it.name.endsWith("-app") }) {
     tasks.named<BootJar>("bootJar") {
         enabled = true
         archiveClassifier.set("boot")
+    }
+
+    tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
     }
 
     tasks.named<Jar>("jar") {

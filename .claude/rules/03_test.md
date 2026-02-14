@@ -1,52 +1,55 @@
 ---
 name: Test Rules
 description: Test generation rules using AssertJ and Kotest with given-when-then structure
+last-verified: 2026-02-14
 ---
 
-# Test Generation Rules for Claude Code
+# Test generation rules
 
 ## Overview
 
-These rules govern how Claude Code generates tests. Tests validate existing behavior - they should never drive changes to production code.
+Tests validate existing behavior. They must never drive changes to production code.
 
-## Critical Rules
+> **Key Principle**: Tests validate behavior, not drive code changes. Never modify production code to make tests pass.
 
-> **IMPORTANT: NEVER MODIFY PRODUCTION CODE TO MAKE TESTS PASS**
+## Critical rules
+
+> **IMPORTANT**: Never modify production code to make tests pass.
 >
-> * Tests validate existing behavior, not drive code changes
-> * If a test fails, fix the test logic or setup, NOT the production code
-> * Production code changes require deliberate feature requests or bug fixes
-> * Write tests that work with the current implementation AS-IS
+> * Tests validate existing behavior, not drive code changes.
+> * If a test fails, fix the test logic or setup, NOT the production code.
+> * Production code changes require deliberate feature requests or bug fixes.
+> * Write tests that work with the current implementation as-is.
 
-> **IMPORTANT: ALWAYS RUN AND VERIFY TESTS**
+> **IMPORTANT**: Always run and verify tests.
 >
-> * Run tests immediately after writing them
-> * Ensure ALL tests pass before considering the task complete
-> * If tests fail, debug and fix the TEST implementation
+> * Run tests immediately after writing them.
+> * Ensure ALL tests pass before considering the task complete.
+> * If tests fail, debug and fix the TEST implementation.
 > * Command: `./gradlew test` or specific test class
 
-> **CAUTION: DO NOT CREATE BOILERPLATE TESTS FOR COVERAGE**
+> **IMPORTANT**: Do not create boilerplate tests for coverage.
 >
-> * NEVER write tests solely to increase code coverage metrics
-> * Avoid trivial tests that only verify getters, setters, or simple pass-through methods
-> * Do not create tests that provide no meaningful validation of business logic
-> * Coverage numbers without meaningful assertions are misleading and add maintenance burden
-> * Ask yourself: "Would this test catch a real bug?" - if no, don't write it
+> * Never write tests solely to increase code coverage metrics.
+> * Avoid trivial tests that only verify getters, setters, or simple pass-through methods.
+> * Do not create tests that provide no meaningful validation of business logic.
+> * Coverage numbers without meaningful assertions are misleading and add maintenance burden.
+> * Ask: "Would this test catch a real bug?" -- if no, do not write it.
 
-> **TIP: GENERATE MEANINGFUL TESTS**
+> **Tip**: Generate meaningful tests.
 >
-> * Focus on testing actual business logic and behavior
-> * Test edge cases, boundary conditions, and error handling paths
-> * Verify complex state transitions and conditional logic
-> * Write tests that would catch real bugs if the implementation changes incorrectly
-> * Prioritize tests for critical paths and high-risk code sections
-> * Each test should answer: "What behavior am I validating, and why does it matter?"
+> * Focus on testing actual business logic and behavior.
+> * Test edge cases, boundary conditions, and error handling paths.
+> * Verify complex state transitions and conditional logic.
+> * Write tests that would catch real bugs if the implementation changes incorrectly.
+> * Prioritize tests for critical paths and high-risk code sections.
+> * Each test must answer: "What behavior am I validating, and why does it matter?"
 
-## Test Libraries
+## Test libraries
 
-### AssertJ (Primary)
+### AssertJ (primary)
 
-Use AssertJ for all assertions. It provides fluent, readable assertions.
+AssertJ provides fluent, readable assertions. Use AssertJ for all assertions.
 
 ```kotlin
 import org.assertj.core.api.Assertions.assertThat
@@ -54,7 +57,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.api.Assertions.within
 ```
 
-### Kotest (When Simpler)
+### Kotest (when simpler)
 
 Use Kotest when it provides cleaner syntax, especially for:
 
@@ -68,9 +71,9 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.string.shouldStartWith
 ```
 
-## Test Method Format
+## Test method format
 
-### Standard JUnit Format
+### Standard JUnit format
 
 ```kotlin
 @Test
@@ -89,7 +92,7 @@ fun `should return user when valid id is provided`(): Unit {
 }
 ```
 
-### Format Rules
+### Format rules
 
 | Element | Rule | Example |
 |---------|------|---------|
@@ -98,7 +101,7 @@ fun `should return user when valid id is provided`(): Unit {
 | Structure | given-when-then with comments | See examples below |
 | Spacing | Blank line between sections | Improves readability |
 
-## Given-When-Then Pattern
+## Given-when-then pattern
 
 ### Structure
 
@@ -117,7 +120,7 @@ fun `descriptive test name explaining scenario and expectation`(): Unit {
 }
 ```
 
-### When Sections Can Be Combined
+### When sections can be combined
 
 For simple tests, sections can be minimal:
 
@@ -135,15 +138,15 @@ fun `should return empty list when no users exist`(): Unit {
 }
 ```
 
-## Grouping Related Tests
+## Grouping related tests
 
-### When to Group
+### When to group
 
 Group related scenarios in a single test when:
 
-* Testing similar behavior with slight variations
-* Context setup is identical
-* Tests would be repetitive if separated
+* Testing similar behavior with slight variations.
+* Context setup is identical.
+* Tests would be repetitive if separated.
 
 ```kotlin
 @Test
@@ -164,7 +167,7 @@ fun `should validate email format correctly`(): Unit {
 }
 ```
 
-### Parameterized Tests (Preferred for Many Cases)
+### Parameterized tests (preferred for many cases)
 
 ```kotlin
 @ParameterizedTest
@@ -187,7 +190,7 @@ fun `should validate email format`(email: String, expected: Boolean): Unit {
 }
 ```
 
-### Kotest Data-Driven Tests
+### Kotest data-driven tests
 
 ```kotlin
 class EmailValidatorTest : FunSpec({
@@ -204,9 +207,9 @@ class EmailValidatorTest : FunSpec({
 })
 ```
 
-## AssertJ Best Practices
+## AssertJ best practices
 
-### Basic Assertions
+### Basic assertions
 
 ```kotlin
 // Equality
@@ -227,7 +230,7 @@ assertThat(value).isLessThanOrEqualTo(10)
 assertThat(value).isBetween(1, 100)
 ```
 
-### String Assertions
+### String assertions
 
 ```kotlin
 assertThat(text).isEqualTo("expected")
@@ -240,7 +243,7 @@ assertThat(text).isNotEmpty
 assertThat(text).hasSize(10)
 ```
 
-### Collection Assertions
+### Collection assertions
 
 ```kotlin
 assertThat(list).isEmpty()
@@ -262,7 +265,7 @@ assertThat(users)
     .hasSize(2)
 ```
 
-### Exception Assertions
+### Exception assertions
 
 ```kotlin
 // Verify exception is thrown
@@ -285,7 +288,7 @@ assertThatCode { service.process(validInput) }
     .doesNotThrowAnyException()
 ```
 
-### Object Assertions
+### Object assertions
 
 ```kotlin
 // Field by field comparison
@@ -305,7 +308,7 @@ assertThat(user)
     .containsExactly("John", "john@example.com", true)
 ```
 
-### Soft Assertions (Multiple Checks)
+### Soft assertions (multiple checks)
 
 ```kotlin
 import org.assertj.core.api.SoftAssertions.assertSoftly
@@ -326,9 +329,9 @@ fun `should create user with all fields populated`(): Unit {
 }
 ```
 
-## Kotest Matchers
+## Kotest matchers
 
-### When to Use Kotest
+### When to use Kotest
 
 ```kotlin
 // Simple equality - cleaner with Kotest
@@ -353,7 +356,7 @@ result.shouldBeNull()
 result.shouldBeInstanceOf<User>()
 ```
 
-### Kotest for Exceptions
+### Kotest for exceptions
 
 ```kotlin
 shouldThrow<IllegalArgumentException> {
@@ -365,44 +368,44 @@ shouldNotThrowAny {
 }
 ```
 
-## Test Quality Guidelines
+## Test quality guidelines
 
-### DO Write Tests That
+### DO write tests that
 
-* Validate actual business logic and behavior
-* Test edge cases and boundary conditions
-* Verify error handling paths
-* Cover complex state transitions
-* Would catch real bugs if implementation changes
+* Validate actual business logic and behavior.
+* Test edge cases and boundary conditions.
+* Verify error handling paths.
+* Cover complex state transitions.
+* Would catch real bugs if implementation changes.
 
-### DO NOT Write Tests That
+### DO NOT write tests that
 
-* Only increase coverage numbers
-* Test trivial getters/setters
-* Verify simple pass-through methods
-* Provide no meaningful validation
-* Test framework behavior (Spring, Hibernate, etc.)
+* Only increase coverage numbers.
+* Test trivial getters/setters.
+* Verify simple pass-through methods.
+* Provide no meaningful validation.
+* Test framework behavior (Spring, Hibernate, etc.).
 
-### Test Design Principles
+### Test design principles
 
 | Principle | Description |
 |-----------|-------------|
-| **Keep Tests Simple** | Patterns are meant to simplify, not overcomplicate. Avoid excessive mocking or overly complex setups. |
-| **Focus on Behavior** | Test the "what," not the "how." Verify outcomes rather than implementation details. |
-| **Avoid Over-Mocking** | Mock only what's necessary to keep tests focused and reliable. Excessive mocking leads to brittle tests. |
-| **Maintain Consistency** | Adopt a pattern that works well for your team and stick to it across the codebase. |
+| **Keep tests simple** | Patterns are meant to simplify, not overcomplicate. Avoid excessive mocking or overly complex setups. |
+| **Focus on behavior** | Test the "what," not the "how." Verify outcomes rather than implementation details. |
+| **Avoid over-mocking** | Mock only what is necessary to keep tests focused and reliable. Excessive mocking leads to brittle tests. |
+| **Maintain consistency** | Adopt a pattern that works well for the team and apply it consistently across the codebase. |
 
-### Example: Meaningful vs Boilerplate
+### Example: Meaningful vs boilerplate
 
 ```kotlin
-// BAD - boilerplate test, no real value
+// Bad - boilerplate test, no real value
 @Test
 fun `should get name`(): Unit {
     val user = User(name = "John")
     assertThat(user.name).isEqualTo("John")
 }
 
-// GOOD - tests actual business logic
+// Good - tests actual business logic
 @Test
 fun `should calculate discount based on membership tier`(): Unit {
     // given
@@ -420,9 +423,9 @@ fun `should calculate discount based on membership tier`(): Unit {
 }
 ```
 
-## Test Organization
+## Test organization
 
-### Nested Tests for Context
+### Nested tests for context
 
 ```kotlin
 @Nested
@@ -451,7 +454,7 @@ inner class CreateTests {
 }
 ```
 
-### Test Naming Conventions
+### Test naming conventions
 
 ```kotlin
 // Pattern: should [expected behavior] when [condition]
@@ -488,7 +491,7 @@ fun `should send email when user is created`(): Unit {
 }
 ```
 
-### MockK (Kotlin Native)
+### MockK (Kotlin native)
 
 ```kotlin
 import io.mockk.*
@@ -510,14 +513,14 @@ fun `should send email when user is created`(): Unit {
 }
 ```
 
-## Summary Checklist
+## Summary checklist
 
 Before submitting tests:
 
 - [ ] Tests run and pass (`./gradlew test`)
 - [ ] No production code was modified to make tests pass
 - [ ] AssertJ or Kotest used for assertions
-- [ ] Given-When-Then structure followed
+- [ ] Given-when-then structure followed
 - [ ] Test names are descriptive
 - [ ] Tests validate meaningful behavior (not boilerplate)
 - [ ] Edge cases and error paths covered
