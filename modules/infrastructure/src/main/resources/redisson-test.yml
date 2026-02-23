@@ -1,44 +1,52 @@
----
 masterSlaveServersConfig:
   # DNS 모니터링 설정
-  dnsMonitoringInterval: 300000
+  dnsMonitoringInterval: 30000
+
   # 타임아웃 설정
-  idleConnectionTimeout: 10000
-  connectTimeout: 10000
+  idleConnectionTimeout: 60000
+  connectTimeout: 5000
   timeout: 3000
+  
   # 재시도 설정
-  retryAttempts: 3
-  retryDelay: !<org.redisson.config.EqualJitterDelay> { baseDelay: PT0.5S, maxDelay: PT1.5S }
-  reconnectionDelay: !<org.redisson.config.EqualJitterDelay> { baseDelay: PT0.1S, maxDelay: PT5S }
-  failedSlaveReconnectionInterval: 3000
+  retryAttempts: 2
+  retryDelay: !<org.redisson.config.EqualJitterDelay> { baseDelay: PT0.1S, maxDelay: PT0.4S }
+  reconnectionDelay: !<org.redisson.config.EqualJitterDelay> { baseDelay: PT0.2S, maxDelay: PT2S }
+
+  failedSlaveReconnectionInterval: 5000
   failedSlaveNodeDetector: !<org.redisson.client.FailedConnectionDetector> { }
+
   password: null
+
   # 구독 연결
-  subscriptionsPerConnection: 5
+  subscriptionsPerConnection: 10
   subscriptionConnectionMinimumIdleSize: 1
-  subscriptionConnectionPoolSize: 25
-  # 
+  subscriptionConnectionPoolSize: 5
+
   clientName: "@projectName@"
   loadBalancer: !<org.redisson.connection.balancer.RoundRobinLoadBalancer> { }
-  # 연결 풀 크기
-  slaveConnectionMinimumIdleSize: 4
-  slaveConnectionPoolSize: 32
-  masterConnectionMinimumIdleSize: 2
-  masterConnectionPoolSize: 16
+
+  # 핵심: pod당 커넥션 최소화
+  slaveConnectionMinimumIdleSize: 1
+  slaveConnectionPoolSize: 4
+  masterConnectionMinimumIdleSize: 1
+  masterConnectionPoolSize: 4
+
   # 읽기/구독 모드
   readMode: "SLAVE"
   subscriptionMode: "SLAVE"
-  #
+
+  # 
   slaveAddresses:
     - "redis://localhost:6379"
   masterAddress: "redis://localhost:6379"
   database: 0
+
   # ElastiCache 특화 설정
-  pingConnectionInterval: 30000  # 연결 상태 체크
-  keepAlive: true  # TCP KeepAlive 활성화
-  tcpNoDelay: true  # Nagle 알고리즘 비활성화
-  #
-threads: 4
-nettyThreads: 8
+  pingConnectionInterval: 30000
+  keepAlive: true
+  tcpNoDelay: true
+
+threads: 2
+nettyThreads: 4
 codec: !<org.redisson.codec.LZ4Codec> { }
 transportMode: "NIO"
